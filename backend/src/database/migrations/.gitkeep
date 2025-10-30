@@ -1,0 +1,40 @@
+/**
+ * Database Migrations
+ * ===================
+ *
+ * Sequelize migrations are stored in this directory.
+ *
+ * To create a new migration:
+ * npx sequelize-cli migration:create --name migration-name
+ *
+ * To run migrations:
+ * npm run db:migrate
+ *
+ * To undo migrations:
+ * npm run db:migrate:undo
+ *
+ * Example Migration Template:
+ *
+ * export async function up(queryInterface, Sequelize) {
+ *   await queryInterface.createTable('table_name', {
+ *     id: {
+ *       type: Sequelize.UUID,
+ *       primaryKey: true,
+ *       defaultValue: Sequelize.UUIDV4,
+ *     },
+ *     // ... column definitions
+ *     created_at: {
+ *       type: Sequelize.DATE,
+ *       defaultValue: Sequelize.NOW,
+ *     },
+ *     updated_at: {
+ *       type: Sequelize.DATE,
+ *       defaultValue: Sequelize.NOW,
+ *     },
+ *   });
+ * }
+ *
+ * export async function down(queryInterface, Sequelize) {
+ *   await queryInterface.dropTable('table_name');
+ * }
+ */

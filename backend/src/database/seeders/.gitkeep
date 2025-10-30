@@ -1,0 +1,32 @@
+/**
+ * Database Seeders
+ * ================
+ *
+ * Sequelize seeders are stored in this directory.
+ *
+ * To create a new seeder:
+ * npx sequelize-cli seed:create --name seeder-name
+ *
+ * To run all seeders:
+ * npm run db:seed:all
+ *
+ * To undo seeders:
+ * npm run db:seed:undo:all
+ *
+ * Example Seeder Template:
+ *
+ * export async function up(queryInterface, Sequelize) {
+ *   await queryInterface.bulkInsert('table_name', [
+ *     {
+ *       id: 'uuid',
+ *       // ... data
+ *       created_at: new Date(),
+ *       updated_at: new Date(),
+ *     },
+ *   ]);
+ * }
+ *
+ * export async function down(queryInterface, Sequelize) {
+ *   await queryInterface.bulkDelete('table_name', null, {});
+ * }
+ */
