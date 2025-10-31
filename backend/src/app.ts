@@ -108,17 +108,19 @@ app.use((req: Request, res: Response) => {
  * Global error handling middleware
  * Must be the last middleware
  */
-app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-  log.error(`❌ Unhandled error:`, err);
+app.use(
+  (err: Error & { statusCode?: number }, req: Request, res: Response, _next: NextFunction) => {
+    log.error(`❌ Unhandled error:`, err);
 
-  const statusCode = err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
+    const statusCode = err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
 
-  res.status(statusCode).json({
-    success: false,
-    message,
-    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
-  });
-});
+    res.status(statusCode).json({
+      success: false,
+      message,
+      ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+    });
+  }
+);
 
 export default app;

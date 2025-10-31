@@ -9,7 +9,7 @@ import app from "./app";
 import logger from "./utils/logger";
 import { initializeDatabase } from "./config/database";
 import { initializeModels } from "./models";
-import { configureStorage } from "./config/bucket.config";
+import { initializeUploadProvider } from "./config/bucket.config";
 import { validateEnv } from "./config/env";
 
 /**
@@ -38,7 +38,7 @@ const startServer = async (): Promise<void> => {
 
     // Configure storage provider
     logger.info("4. Configuring storage provider...");
-    await configureStorage();
+    initializeUploadProvider();
 
     // Start Express server
     const PORT = process.env.PORT || 8080;
@@ -79,7 +79,7 @@ const startServer = async (): Promise<void> => {
     /**
      * Handle unhandled promise rejections
      */
-    process.on("unhandledRejection", (reason: any) => {
+    process.on("unhandledRejection", (reason: unknown) => {
       logger.error("Unhandled Rejection:", reason);
       process.exit(1);
     });

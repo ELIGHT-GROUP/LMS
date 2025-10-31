@@ -15,7 +15,7 @@ import { log } from "../utils/logger";
  */
 export const httpLoggerMiddleware = (req: Request, res: Response, next: NextFunction): void => {
   const startTime = Date.now();
-  const requestId = (req as any).requestId || "unknown";
+  const requestId = (req as Request & { requestId?: string }).requestId || "unknown";
 
   // Log incoming request
   log.http(`${req.method} ${req.url}`, {
@@ -32,7 +32,7 @@ export const httpLoggerMiddleware = (req: Request, res: Response, next: NextFunc
   // Capture response details
   const originalJson = res.json.bind(res);
 
-  res.json = function (data: any) {
+  res.json = function (data: unknown) {
     const duration = Date.now() - startTime;
     const statusCode = res.statusCode;
 
