@@ -23,12 +23,12 @@ export const AuthController = {
    * Validation handled by Zod middleware
    */
   registerUser: asyncHandler(async (req: IAuthenticatedRequest, res: Response): Promise<void> => {
-    const { email, password, phone_number, role } = req.body;
+    const { email, password, phoneNumber, role } = req.body;
 
     const dto: IRegisterUserDto = {
       email,
       password,
-      phone_number,
+      phoneNumber,
       role,
     };
 
@@ -43,9 +43,9 @@ export const AuthController = {
    * Validation handled by Zod middleware
    */
   loginUser: asyncHandler(async (req: IAuthenticatedRequest, res: Response): Promise<void> => {
-    const { phone_number, password } = req.body;
+    const { phoneNumber, password } = req.body;
 
-    const dto: ILoginUserDto = { phone_number, password };
+    const dto: ILoginUserDto = { phoneNumber, password };
 
     const response = await AuthService.loginUser(dto);
     successResponse(res, response.message, response.data);
@@ -58,9 +58,9 @@ export const AuthController = {
    * Validation handled by Zod middleware
    */
   requestSendOtp: asyncHandler(async (req: IAuthenticatedRequest, res: Response): Promise<void> => {
-    const { phone_number } = req.body;
+    const { phoneNumber } = req.body;
 
-    const response = await AuthService.requestSendOtp({ phone_number });
+    const response = await AuthService.requestSendOtp({ phoneNumber });
     successResponse(res, response.message, response.data);
   }),
 
@@ -87,9 +87,9 @@ export const AuthController = {
    */
   requestPasswordReset: asyncHandler(
     async (req: IAuthenticatedRequest, res: Response): Promise<void> => {
-      const { phone_number } = req.body;
+      const { phoneNumber } = req.body;
 
-      const response = await AuthService.requestPasswordReset({ phone_number });
+      const response = await AuthService.requestPasswordReset({ phoneNumber });
       successResponse(res, response.message, response.data);
     }
   ),

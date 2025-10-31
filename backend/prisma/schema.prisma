@@ -10,48 +10,193 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// User Model
-model User {
-  id                 String     @id @default(cuid())
-  email              String?    @unique
-  phone_number       String     @unique
-  password           String
-  first_name         String?
-  last_name          String?
-  profile_picture    String?
-  role               String     @default("STUDENT") // ADMIN, TEACHER, STUDENT, CLIENT
-  account_status     String     @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED, DELETED
-  is_active          Boolean    @default(true)
-  is_verified        Boolean    @default(false)
-  verification_code  String?
-  verification_code_expires_at DateTime?
-  theme_mode         String     @default("LIGHT") // LIGHT, DARK
-  last_login         DateTime?
-  created_at         DateTime   @default(now())
-  updated_at         DateTime   @updatedAt
-
-  // Relations
-  tokens             Token[]
-
-  @@index([phone_number])
-  @@index([email])
-  @@index([is_active])
+// Enums
+enum Role {
+  OWNER
+  ADMIN
+  STUDENT
 }
 
-// Token Model for JWT tracking
-model Token {
-  id                 String     @id @default(cuid())
-  user_id            String
-  token              String     @unique
-  expire_at          DateTime
-  is_active          Boolean    @default(true)
-  created_at         DateTime   @default(now())
-  updated_at         DateTime   @updatedAt
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  DELETED
+  PENDING
+}
+
+enum VerificationTokenType {
+  VERIFY_EMAIL
+  VERIFY_PHONE
+  PASSWORD_RESET
+  INVITE_ADMIN
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum Provider {
+  LOCAL
+  GOOGLE
+  FACEBOOK
+}
+
+// Central Authentication Model
+model AuthUser {
+  id                   String     @id @default(cuid())
+  email                String?    @unique
+  phoneNumber          String     @unique @map("phone_number")
+  whatsappNumber       String?    @map("whatsapp_number")
+  passwordHash         String     @map("password_hash")
+  passwordChangedAt    DateTime?  @map("password_changed_at")
+  provider             Provider   @default(LOCAL)
+  providerId           String?    @map("provider_id")
+  googleId             String?    @unique @map("google_id")
+  facebookId           String?    @unique @map("facebook_id")
+  role                 Role       @default(STUDENT)
+  type                 String?    @default("fee") // fee, paid, etc
+  isActive             Boolean    @default(true) @map("is_active")
+  isEmailVerified      Boolean    @default(false) @map("is_email_verified")
+  isMobileVerified     Boolean    @default(false) @map("is_mobile_verified")
+  isAccountVerified    Boolean    @default(false) @map("is_account_verified")
+  accountStatus        AccountStatus @default(ACTIVE) @map("account_status")
+  lastLogin            DateTime?  @map("last_login")
+  maxLoginDevice       Int?       @map("max_login_device")
+  themeMode            String?    @default("LIGHT") @map("theme_mode") // LIGHT, DARK
+  studentProfileId     String?    @unique @map("student_profile_id")
+  adminProfileId       String?    @unique @map("admin_profile_id")
+  tokens               Json       @default("[]") // Array of JWT tokens
+  verificationTokens   Json       @default("[]") @map("verification_tokens") // Array of OTP codes
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
 
   // Relations
-  user               User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  studentProfile       StudentProfile?
+  adminProfile         AdminProfile?
+  invitationsCreated   Invitation[]       @relation("createdBy")
+  invitationsAccepted  Invitation[]       @relation("acceptedBy")
 
-  @@index([user_id])
-  @@index([token])
-  @@index([is_active])
+  @@index([phoneNumber])
+  @@index([email])
+  @@index([isActive])
+  @@index([role])
+  @@map("auth_users")
+}
+
+// Student Profile Model
+model StudentProfile {
+  id                   String     @id @default(cuid())
+  authUserId           String     @unique @map("auth_user_id")
+  firstName            String?    @map("first_name")
+  lastName             String?    @map("last_name")
+  dob                  DateTime?  @map("date_of_birth")
+  gender               String?
+  profilePicture       String?    @map("profile_picture")
+  signUpVia            String?    @map("sign_up_via")
+  pushId               String?    @map("push_id")
+  year                 Int?
+  nic                  String?
+  nicPic               String?    @map("nic_pic")
+  registerCode         String?    @map("register_code")
+  isProfileCompleted   Boolean    @default(false) @map("is_profile_completed")
+  approvalStatus       String     @default("PENDING") @map("approval_status") // PENDING, APPROVED, REJECTED
+  approvedBy           String?    @map("approved_by")
+  approvedAt           DateTime?  @map("approved_at")
+  status               String?
+  extraDetails         Json?      @map("extra_details") // Custom registration fields
+  deliveryDetails      Json?      @map("delivery_details") // Delivery address, etc
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  authUser             AuthUser   @relation(fields: [authUserId], references: [id], onDelete: Cascade)
+
+  @@index([authUserId])
+  @@index([approvalStatus])
+  @@map("student_profiles")
+}
+
+// Admin Profile Model
+model AdminProfile {
+  id         String     @id @default(cuid())
+  authUserId String     @unique @map("auth_user_id")
+  firstName  String?    @map("first_name")
+  lastName   String?    @map("last_name")
+  email      String?
+  image      String?
+  type       String?
+  status     String?    @default("ACTIVE") @map("status") // ACTIVE, INACTIVE
+  createdBy  String?    @map("created_by")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  authUser       AuthUser        @relation(fields: [authUserId], references: [id], onDelete: Cascade)
+  permissions    AdminPermission[]
+
+  @@index([authUserId])
+  @@map("admin_profiles")
+}
+
+// Permission Model
+model Permission {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  isActive    Boolean    @default(true) @map("is_active")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  adminPermissions AdminPermission[]
+
+  @@map("permissions")
+}
+
+// Admin-Permission Join Table
+model AdminPermission {
+  id            String     @id @default(cuid())
+  adminProfileId String    @map("admin_profile_id")
+  permissionId  String     @map("permission_id")
+  isActive      Boolean    @default(true) @map("is_active")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  adminProfile  AdminProfile @relation(fields: [adminProfileId], references: [id], onDelete: Cascade)
+  permission    Permission   @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([adminProfileId, permissionId])
+  @@index([adminProfileId])
+  @@index([permissionId])
+  @@map("admin_permissions")
+}
+
+// Invitation Model for inviting admins and owners
+model Invitation {
+  id                String     @id @default(cuid())
+  email             String
+  tokenHash         String     @unique @map("token_hash")
+  invitedById       String     @map("invited_by_id")
+  role              Role       // ADMIN or OWNER only
+  preassignedPerms  Json?      @map("preassigned_perms")
+  status            InviteStatus @default(PENDING)
+  acceptedById      String?    @map("accepted_by_id")
+  acceptedAt        DateTime?  @map("accepted_at")
+  expiresAt         DateTime   @map("expires_at")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  createdByUser     AuthUser   @relation("createdBy", fields: [invitedById], references: [id], onDelete: Cascade)
+  acceptedByUser    AuthUser?  @relation("acceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([status])
+  @@index([invitedById])
+  @@map("invitations")
 }

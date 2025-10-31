@@ -37,19 +37,27 @@ export const authMiddleware = async (
     // Verify token
     const decoded = verifyToken(token);
 
-    // Check if token is active in database
+    // Check if token is active in database (JSON array search)
     const prisma = getPrisma();
-    const tokenRecord = await prisma.token.findUnique({
-      where: { token },
+    const authUser = await prisma.authUser.findUnique({
+      where: { id: decoded.id },
     });
 
-    if (!tokenRecord || !tokenRecord.is_active) {
+    if (!authUser) {
+      unauthorizedResponse(res, "User not found");
+      return;
+    }
+
+    // Search token in JSON array
+    const tokenRecord = ((authUser as any).tokens || []).find((t: any) => t.token === token);
+
+    if (!tokenRecord || !tokenRecord.isActive) {
       unauthorizedResponse(res, "Token is not active or has been revoked");
       return;
     }
 
     // Check token expiration
-    if (tokenRecord.expire_at < new Date()) {
+    if (new Date(tokenRecord.expireAt) < new Date()) {
       unauthorizedResponse(res, "Token has expired");
       return;
     }

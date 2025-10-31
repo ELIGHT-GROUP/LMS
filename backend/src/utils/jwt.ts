@@ -19,7 +19,7 @@ export const generateToken = (user: { id: string; role: string }): string => {
   try {
     const payload: IJwtPayload = {
       id: user.id,
-      role: user.role,
+      role: user.role as "OWNER" | "ADMIN" | "STUDENT",
     };
 
     const token = jwt.sign(payload, JWT_SECRET, {

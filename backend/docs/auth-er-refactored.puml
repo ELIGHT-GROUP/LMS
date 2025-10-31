@@ -1,0 +1,171 @@
+@startuml
+' Hybrid Auth System ER Diagram - Refactored
+' Token and VerificationToken merged as JSON objects in AuthUser
+
+skinparam entity {
+  BackgroundColor PaleGreen
+  BorderColor Black
+}
+
+' ========== AUTH USER ==========
+entity "auth_user" as auth_user {
+  * id : UUID
+  --
+  email : VARCHAR (unique, nullable)
+  phone_number : VARCHAR (unique)
+  whatsapp_number : VARCHAR (nullable)
+  password_hash : VARCHAR
+  password_changed_at : TIMESTAMP (nullable)
+  provider : ENUM (LOCAL, GOOGLE, FACEBOOK)
+  provider_id : VARCHAR (nullable)
+  google_id : VARCHAR (nullable, unique)
+  facebook_id : VARCHAR (nullable, unique)
+  role : ENUM (OWNER, ADMIN, TEACHER, STUDENT, CLIENT)
+  type : VARCHAR (fee, paid)
+  is_active : BOOLEAN
+  is_email_verified : BOOLEAN
+  is_mobile_verified : BOOLEAN
+  is_account_verified : BOOLEAN
+  account_status : ENUM
+  last_login : TIMESTAMP (nullable)
+  max_login_device : INTEGER (nullable)
+  theme_mode : VARCHAR (LIGHT, DARK)
+  student_profile_id : UUID (FK, nullable)
+  admin_profile_id : UUID (FK, nullable)
+  tokens : JSON (array of JWT tokens)
+  verification_tokens : JSON (array of OTP codes)
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+' ========== STUDENT PROFILE ==========
+entity "student_profile" as student_profile {
+  * id : UUID
+  --
+  auth_user_id : UUID  <<FK>>
+  first_name : VARCHAR (nullable)
+  last_name : VARCHAR (nullable)
+  dob : DATE (nullable)
+  gender : VARCHAR (nullable)
+  profile_picture : VARCHAR (nullable)
+  sign_up_via : VARCHAR (nullable)
+  push_id : VARCHAR (nullable)
+  year : INTEGER (nullable)
+  nic : VARCHAR (nullable)
+  nic_pic : VARCHAR (nullable)
+  register_code : VARCHAR (nullable)
+  is_profile_completed : BOOLEAN
+  approval_status : ENUM (PENDING, APPROVED, REJECTED)
+  approved_by : UUID  <<FK>> (nullable)
+  approved_at : TIMESTAMP (nullable)
+  status : VARCHAR (nullable)
+  extra_details : JSON (custom fields)
+  delivery_details : JSON (delivery address, etc)
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+' ========== ADMIN PROFILE ==========
+entity "admin_profile" as admin_profile {
+  * id : UUID
+  --
+  auth_user_id : UUID  <<FK>>
+  first_name : VARCHAR (nullable)
+  last_name : VARCHAR (nullable)
+  email : VARCHAR (nullable)
+  image : VARCHAR (nullable)
+  type : VARCHAR (nullable)
+  status : VARCHAR (ACTIVE, INACTIVE)
+  created_by : UUID  <<FK>> (nullable)
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+' ========== PERMISSIONS ==========
+entity "permission" as permission {
+  * id : UUID
+  --
+  name : VARCHAR
+  description : TEXT (nullable)
+  is_active : BOOLEAN
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "admin_permission" as admin_permission {
+  * id : UUID
+  --
+  admin_profile_id : UUID <<FK>>
+  permission_id : UUID <<FK>>
+  is_active : BOOLEAN
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+' ========== INVITATION ==========
+entity "invitation" as invitation {
+  * id : UUID
+  --
+  email : VARCHAR
+  token_hash : VARCHAR (unique)
+  invited_by_id : UUID <<FK>>
+  role : ENUM (ADMIN, TEACHER)
+  preassigned_perms : JSON (array)
+  status : ENUM (PENDING, ACCEPTED, EXPIRED, REVOKED)
+  accepted_by_id : UUID <<FK>> (nullable)
+  accepted_at : TIMESTAMP (nullable)
+  expires_at : TIMESTAMP
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+' ========== SITE SETTINGS ==========
+entity "site_setting" as site_setting {
+  * id : UUID
+  --
+  is_extra_register_field : BOOLEAN
+  extra_register_field : JSON (extra registration fields)
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+' ========== CENTRAL SETTINGS ==========
+entity "control_setting" as control_setting {
+  * id : UUID
+  --
+  maximum_student : INTEGER
+  features : JSON (control values)
+  is_banned : BOOLEAN
+  status : VARCHAR
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+' ========== PAYMENT ==========
+entity "payment" as payment {
+  * id : UUID
+  --
+  student_id : UUID <<FK>>
+  class_id : UUID <<FK>>
+  email : VARCHAR
+  month : VARCHAR
+  type : VARCHAR
+  inp : VARCHAR
+  status : VARCHAR
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+' ========== RELATIONSHIPS ==========
+auth_user ||--o{ student_profile : "has"
+auth_user ||--o{ admin_profile : "has"
+auth_user ||--o{ admin_permission : "receives"
+admin_profile ||--o{ admin_permission : "grants"
+permission ||--o{ admin_permission : "applies to"
+auth_user ||--o{ invitation : "creates"
+auth_user ||--o{ invitation : "accepts"
+student_profile }o--|| auth_user : "approved_by"
+admin_profile }o--|| auth_user : "created_by"
+student_profile ||--o{ payment : "makes"
+
+@enduml

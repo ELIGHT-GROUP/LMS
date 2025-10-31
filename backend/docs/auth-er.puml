@@ -1,0 +1,106 @@
+@startuml
+' Simple ER for hybrid auth model (auth_user + profiles)
+' Use PlantUML (db or entity) to render
+
+skinparam entity {
+  BackgroundColor PaleGreen
+  BorderColor Black
+}
+
+entity "auth_user" as auth_user {
+  * id : UUID
+  --
+  email : VARCHAR (unique)
+  phone_number : VARCHAR (unique)
+  password_hash : VARCHAR
+  provider : ENUM (LOCAL, GOOGLE, FACEBOOK)
+  provider_id : VARCHAR
+  role : ENUM (ADMIN, STUDENT, TEACHER, OWNER)
+  is_active : BOOLEAN
+  is_email_verified : BOOLEAN
+  is_mobile_verified : BOOLEAN
+  account_status : ENUM
+  last_login : TIMESTAMP
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "student_profile" as student_profile {
+  * id : UUID
+  --
+  auth_user_id : UUID  <<FK>>
+  first_name : VARCHAR
+  last_name : VARCHAR
+  dob : DATE
+  gender : VARCHAR
+  profile_picture : VARCHAR
+  extra_classes : JSON
+  approval_status : ENUM (PENDING, APPROVED, REJECTED)
+  approved_by : UUID  <<FK (admin auth_user.id)>>
+  approved_at : TIMESTAMP
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "admin_profile" as admin_profile {
+  * id : UUID
+  --
+  auth_user_id : UUID  <<FK>>
+  first_name : VARCHAR
+  last_name : VARCHAR
+  contact_no : VARCHAR
+  image : VARCHAR
+  created_by : UUID  <<FK (owner/admin auth_user.id)>>
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "token" as token {
+  * id : UUID
+  --
+  auth_user_id : UUID  <<FK>>
+  token : TEXT
+  device_info : JSON
+  ip_address : VARCHAR
+  expire_at : TIMESTAMP
+  is_active : BOOLEAN
+  created_at : TIMESTAMP
+}
+
+entity "verification_token" as verification_token {
+  * id : UUID
+  --
+  auth_user_id : UUID  <<FK>>
+  token : VARCHAR
+  type : ENUM (VERIFY_EMAIL, VERIFY_PHONE, PASSWORD_RESET)
+  expires_at : TIMESTAMP
+  is_used : BOOLEAN
+  created_at : TIMESTAMP
+}
+
+entity "permission" as permission {
+  * id : UUID
+  --
+  name : VARCHAR
+  description : TEXT
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "admin_permission" as admin_permission {
+  * id : UUID
+  --
+  admin_profile_id : UUID <<FK>>
+  permission_id : UUID <<FK>>
+  created_at : TIMESTAMP
+}
+
+' Relationships
+auth_user ||--o{ student_profile : "has"
+auth_user ||--o{ admin_profile : "has"
+auth_user ||--o{ token : "issues"
+auth_user ||--o{ verification_token : "issues"
+admin_profile ||--o{ admin_permission : "grants"
+permission ||--o{ admin_permission : "applies to"
+
+@enduml

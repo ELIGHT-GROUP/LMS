@@ -1,7 +1,7 @@
 /**
  * Request/Response Type Definitions
  * ====================================
- * Common types used across controllers, services, and utilities
+ * Central location for all TypeScript type definitions used across the application
  */
 
 import { Request, Response, NextFunction } from "express";
@@ -26,44 +26,6 @@ export interface IApiResponse<T = any> {
 }
 
 /**
- * User Registration DTO
- */
-export interface IRegisterUserDto {
-  email?: string;
-  password: string;
-  phone_number: string;
-  role?: string;
-}
-
-/**
- * User Login DTO
- */
-export interface ILoginUserDto {
-  phone_number: string;
-  password: string;
-}
-
-/**
- * JWT Payload
- */
-export interface IJwtPayload {
-  id: string;
-  role: string;
-}
-
-/**
- * User Profile
- */
-export interface IUserProfile {
-  id: string;
-  email?: string;
-  phone_number: string;
-  role: string;
-  is_verified: boolean;
-  is_active: boolean;
-}
-
-/**
  * Middleware type
  */
 export type IMiddleware = (
@@ -71,3 +33,28 @@ export type IMiddleware = (
   res: Response,
   next: NextFunction
 ) => Promise<void> | void;
+
+/**
+ * Re-export all auth-related types from auth.types.ts
+ * Includes: DTOs, Token types, VerificationToken types, service interfaces
+ */
+export type {
+  Token,
+  TokenPayload,
+  VerificationToken,
+  VerificationTokenRequest,
+  IRegisterUserDto,
+  ILoginUserDto,
+  IOtpRequestDto,
+  IVerifyMobileDto,
+  IPasswordResetRequestDto,
+  IPasswordResetDto,
+  IUserProfile,
+  ILoginResponse,
+  IRegisterResponse,
+  IAuthService,
+  IJwtPayload,
+  IDeviceInfo,
+  ITokenOptions,
+  IOtpResponse,
+} from "./auth.types";

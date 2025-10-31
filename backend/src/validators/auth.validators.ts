@@ -12,7 +12,7 @@ import { VALIDATION } from "../constants/enums";
  * Register/Signup validation schema
  */
 export const registerSchema = z.object({
-  phone_number: z
+  phoneNumber: z
     .string({ message: "Phone number is required" })
     .min(1, "Phone number cannot be empty")
     .regex(VALIDATION.PHONE_REGEX, "Invalid phone number format"),
@@ -49,7 +49,7 @@ export const registerSchema = z.object({
  * Login validation schema
  */
 export const loginSchema = z.object({
-  phone_number: z
+  phoneNumber: z
     .string({ message: "Phone number is required" })
     .min(1, "Phone number cannot be empty"),
 
@@ -60,7 +60,7 @@ export const loginSchema = z.object({
  * Request OTP validation schema
  */
 export const requestOtpSchema = z.object({
-  phone_number: z
+  phoneNumber: z
     .string({ message: "Phone number is required" })
     .min(1, "Phone number cannot be empty")
     .regex(VALIDATION.PHONE_REGEX, "Invalid phone number format"),
@@ -85,7 +85,7 @@ export const verifyOtpSchema = z.object({
  * Password reset request validation schema
  */
 export const requestPasswordResetSchema = z.object({
-  phone_number: z
+  phoneNumber: z
     .string({ message: "Phone number is required" })
     .min(1, "Phone number cannot be empty")
     .regex(VALIDATION.PHONE_REGEX, "Invalid phone number format"),
