@@ -55,7 +55,8 @@
     "multer": "^2.0.2",
     "nodemailer": "^6.10.0",
     "pg": "^8.13.3",
-    "winston": "^3.17.0"
+    "winston": "^3.17.0",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@eslint/js": "^8.57.1",
