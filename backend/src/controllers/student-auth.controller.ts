@@ -20,10 +20,9 @@ import { successResponse } from "../utils/response";
 /**
  * Register new student
  * POST /api/auth/signup
- * Body: { email, password?, googleToken? }
+ * Body: { email, password }
  */
 export const registerStudent = asyncHandler(async (req: Request, res: Response) => {
-  // TODO: Add validation with registerStudentSchema
   const result = await StudentAuthService.registerStudent(req.body);
 
   successResponse(res, result.message, result.data, 201);
@@ -40,7 +39,6 @@ export const updateStudentProfile = asyncHandler(async (req: Request, res: Respo
   if (!userId) {
     throw new Error("User ID not found in request");
   }
-  // TODO: Add validation with updateStudentProfileSchema
   const result = await StudentAuthService.updateStudentProfile(userId, req.body);
 
   successResponse(res, result.message, result.data);

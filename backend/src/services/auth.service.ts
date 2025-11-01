@@ -27,6 +27,7 @@ import {
 } from "../utils/errors";
 import logger from "../utils/logger";
 import { API_MESSAGES } from "../constants/enums";
+import { verifyGoogleToken } from "../utils/oauth";
 
 /**
  * Helper function to generate 6-digit code
@@ -62,11 +63,13 @@ export const StudentAuthService = {
   }> {
     const prisma = getPrisma();
     try {
-      const { email, password, googleToken } = dto;
+      const { email, password } = dto;
 
-      // Validate that at least one auth method is provided
-      if (!password && !googleToken) {
-        throw new BadRequestError("Password or Google token required");
+      // Password is required for direct signup
+      if (!password) {
+        throw new BadRequestError(
+          "Password is required for signup. Use Google OAuth for Google signup."
+        );
       }
 
       // Check if email already exists
@@ -79,44 +82,31 @@ export const StudentAuthService = {
         throw new BadRequestError(API_MESSAGES.EMAIL_ALREADY_EXISTS);
       }
 
-      let authUserData: any = {
-        email,
-        role: "STUDENT",
-        type: "LOCAL",
-        isEmailVerified: true,
-        isMobileVerified: false,
-        isAccountVerified: false,
-        maxLoginDevice: 5,
-        themeMode: "light",
-        tokens: [],
-        verification_tokens: [],
-      };
+      const hashedPassword = await hashPassword(password);
 
-      // Normal signup
-      if (password) {
-        const hashedPassword = await hashPassword(password);
-        authUserData.passwordHash = hashedPassword;
-        authUserData.provider = "LOCAL";
-      }
-
-      // Google signup
-      if (googleToken) {
-        // TODO: Verify Google token with Google API
-        authUserData.provider = "GOOGLE";
-        authUserData.providerId = "google_sub_placeholder";
-        authUserData.googleId = googleToken;
-      }
-
-      // Create auth user
+      // Create AuthUser
       const authUser = await prisma.authUser.create({
-        data: authUserData as any,
+        data: {
+          email,
+          role: "STUDENT",
+          type: "LOCAL",
+          provider: "LOCAL",
+          passwordHash: hashedPassword,
+          isEmailVerified: false,
+          isMobileVerified: false,
+          isAccountVerified: false,
+          maxLoginDevice: 5,
+          themeMode: "light",
+          tokens: [],
+          verification_tokens: [],
+        } as any,
       });
 
       // Create StudentProfile
       await prisma.studentProfile.create({
         data: {
           authUserId: authUser.id,
-          signUpVia: googleToken ? "GOOGLE" : "WEB",
+          signUpVia: "WEB",
           isProfileCompleted: false,
           status: "PENDING",
           approvalStatus: "PENDING",
@@ -576,6 +566,99 @@ export const StudentAuthService = {
         throw error;
       }
       throw new InternalServerError("Failed to fetch auth data");
+    }
+  },
+
+  /**
+   * Register or update student with Google OAuth
+   */
+  async registerStudentWithGoogle(
+    email: string,
+    googleData: any
+  ): Promise<{
+    message: string;
+    data: { userId: string; email: string; token: string };
+  }> {
+    const prisma = getPrisma();
+    try {
+      // Check if email already exists
+      let authUser = await prisma.authUser.findUnique({
+        where: { email },
+      });
+
+      if (authUser) {
+        // User exists, check if they can use Google
+        if (authUser.role !== "STUDENT") {
+          throw new BadRequestError("Email registered with different role");
+        }
+        // Update provider if needed
+        if (authUser.provider !== "GOOGLE") {
+          await prisma.authUser.update({
+            where: { id: authUser.id },
+            data: {
+              provider: "GOOGLE",
+              providerId: googleData.sub,
+              googleId: googleData.sub,
+            },
+          });
+        }
+      } else {
+        // Create new student
+        authUser = await prisma.authUser.create({
+          data: {
+            email,
+            role: "STUDENT",
+            type: "LOCAL",
+            provider: "GOOGLE",
+            providerId: googleData.sub,
+            googleId: googleData.sub,
+            isEmailVerified: true, // Google verified email
+            isMobileVerified: false,
+            isAccountVerified: false,
+            maxLoginDevice: 5,
+            themeMode: "light",
+            tokens: [],
+            verification_tokens: [],
+          } as any,
+        });
+
+        // Create StudentProfile
+        await prisma.studentProfile.create({
+          data: {
+            authUserId: authUser.id,
+            signUpVia: "GOOGLE",
+            isProfileCompleted: false,
+            status: "PENDING",
+            approvalStatus: "PENDING",
+            firstName: googleData.given_name,
+            lastName: googleData.family_name,
+            profilePicture: googleData.picture,
+          } as any,
+        });
+
+        logger.info(`Student registered via Google: ${authUser.id}`);
+      }
+
+      // Generate JWT token
+      const token = generateToken({
+        id: authUser.id,
+        role: authUser.role,
+      });
+
+      return {
+        message: API_MESSAGES.USER_CREATED,
+        data: {
+          userId: authUser.id,
+          email: authUser.email!,
+          token,
+        },
+      };
+    } catch (error) {
+      logger.error("Error in registerStudentWithGoogle:", error);
+      if (error instanceof BadRequestError) {
+        throw error;
+      }
+      throw new InternalServerError("Google registration failed");
     }
   },
 };

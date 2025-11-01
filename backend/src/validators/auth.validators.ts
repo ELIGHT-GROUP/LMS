@@ -11,55 +11,40 @@ import { VALIDATION } from "../constants/enums";
 /**
  * Student Registration validation schema
  * POST /auth/signup
- * Requires either password or googleToken
+ * Only email and password - Google signup via OAuth callback
  */
-export const registerStudentSchema = z
-  .object({
-    email: z
-      .string({ message: "Email is required" })
-      .email("Invalid email format")
-      .max(VALIDATION.MAX_EMAIL_LENGTH || 255, "Email is too long"),
+export const registerStudentSchema = z.object({
+  email: z
+    .string({ message: "Email is required" })
+    .email("Invalid email format")
+    .max(VALIDATION.MAX_EMAIL_LENGTH || 255, "Email is too long"),
 
-    password: z
-      .string()
-      .min(
-        VALIDATION.MIN_PASSWORD_LENGTH || 6,
-        `Password must be at least ${VALIDATION.MIN_PASSWORD_LENGTH || 6} characters`
-      )
-      .max(
-        VALIDATION.MAX_PASSWORD_LENGTH || 128,
-        `Password must not exceed ${VALIDATION.MAX_PASSWORD_LENGTH || 128} characters`
-      )
-      .optional(),
-
-    googleToken: z.string().optional(),
-  })
-  .refine(
-    (data) => data.password || data.googleToken,
-    "Either password or googleToken must be provided"
-  );
+  password: z
+    .string({ message: "Password is required" })
+    .min(
+      VALIDATION.MIN_PASSWORD_LENGTH || 6,
+      `Password must be at least ${VALIDATION.MIN_PASSWORD_LENGTH || 6} characters`
+    )
+    .max(
+      VALIDATION.MAX_PASSWORD_LENGTH || 128,
+      `Password must not exceed ${VALIDATION.MAX_PASSWORD_LENGTH || 128} characters`
+    ),
+});
 
 /**
  * Admin Registration validation schema
  * POST /auth/admin/register
- * Requires invitation token and either password or googleToken
+ * Only password and invitation token - Google signup via OAuth callback
  */
-export const adminRegistrationSchema = z
-  .object({
-    email: z.string().email("Invalid email format").optional(),
+export const adminRegistrationSchema = z.object({
+  email: z.string().email("Invalid email format"),
 
-    password: z.string().min(6, "Password must be at least 6 characters").optional(),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 
-    googleToken: z.string().optional(),
-
-    invitationToken: z
-      .string({ message: "Invitation token is required" })
-      .min(1, "Invitation token cannot be empty"),
-  })
-  .refine(
-    (data) => data.password || data.googleToken,
-    "Either password or googleToken must be provided"
-  );
+  invitationToken: z
+    .string({ message: "Invitation token is required" })
+    .min(1, "Invitation token cannot be empty"),
+});
 
 /**
  * Login validation schema
@@ -177,4 +162,28 @@ export const passwordResetSchema = z.object({
  */
 export const assignPermissionsSchema = z.object({
   permissions: z.array(z.string()).min(1, "At least one permission must be specified"),
+});
+
+/**
+ * OAuth Initiate validation schema
+ * GET /auth/google/initiate?role=STUDENT&invitationToken=optional
+ */
+export const oauthInitiateSchema = z.object({
+  role: z.enum(["STUDENT", "ADMIN"], { message: "Role must be STUDENT or ADMIN" }),
+
+  invitationToken: z.string().optional(),
+});
+
+/**
+ * OAuth Callback validation schema
+ * GET /auth/google/callback?code=xxx&state=yyy
+ */
+export const oauthCallbackSchema = z.object({
+  code: z.string({ message: "Authorization code is required" }).min(1, "Code cannot be empty"),
+
+  state: z.string({ message: "State parameter is required" }).min(1, "State cannot be empty"),
+
+  error: z.string().optional(),
+
+  error_description: z.string().optional(),
 });

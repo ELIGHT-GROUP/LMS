@@ -1,0 +1,162 @@
+﻿###
+# ADMIN AUTHENTICATION FLOW
+# ==========================
+#
+# Complete flow for admin invitation and authentication:
+# 1. OWNER: POST /admin/invite (creates invitation)
+# 2. Send invitation link to admin email
+# 3. Admin: Google OAuth via /google/initiate?role=ADMIN&invitationToken=xxx
+#    OR Direct signup: POST /admin/register with password + invitationToken
+# 4. Admin: Update profile with PUT /admin/profile
+# 5. OWNER: Assign permissions with POST /admin/:adminId/permissions
+#
+# Key Difference from Student:
+# - Requires invitation token from OWNER
+# - OWNER-only endpoints marked with [OWNER]
+# - Admin must complete profile before full account verification
+
+@baseUrl = http://localhost:5000/api/auth
+@ownerToken = 
+@ownerId = owner_cuid
+@adminToken = 
+@adminId = admin_cuid
+@invitationToken = 
+
+###
+# ENDPOINT 1 [OWNER]: CREATE ADMIN INVITATION
+# 
+# OWNER generates invitation link for new admin
+# Response: { "invitationLink": "...", "expiresAt": "..." }
+# 
+# Send this link to admin via email (TODO: Email integration)
+# Admin will use token from URL: /admin/register?token=abc123xyz
+#
+# Rate Limit: None (OWNER only)
+POST {{baseUrl}}/admin/invite
+Content-Type: application/json
+Authorization: Bearer {{ownerToken}}
+
+{
+  "email": "newadmin@example.com",
+  "role": "ADMIN"
+}
+
+###
+# ENDPOINT 2: ADMIN GOOGLE OAUTH SIGNUP (Browser Flow)
+#
+# Admin receives invitation link with token
+# Opens: {{baseUrl}}/google/initiate?role=ADMIN&invitationToken=RECEIVED_TOKEN
+#
+# STEP 1: Open URL in browser (invitation token included)
+# STEP 2: Redirected to Google consent screen
+# STEP 3: User authorizes
+# STEP 4: Google redirects to /google/callback (automatic)
+# STEP 5: Backend validates invitation token against email
+# STEP 6: Backend creates admin account with Google data
+# STEP 7: Backend redirects to: FRONTEND_URL/auth-callback?token=JWT&userId=...&role=ADMIN
+#
+# Copy the 'token' from callback URL to @adminToken
+
+###
+# ENDPOINT 3: ADMIN DIRECT SIGNUP (Email/Password)
+#
+# Admin uses invitation token to register with password
+# Response: { "userId": "...", "email": "...", "token": "..." }
+# 
+# Copy returned token to @adminToken
+POST {{baseUrl}}/admin/register
+Content-Type: application/json
+
+{
+  "email": "newadmin@example.com",
+  "password": "secureAdminPassword123",
+  "invitationToken": "token_from_invitation_email"
+}
+
+###
+# ENDPOINT 4: UPDATE ADMIN PROFILE
+#
+# Admin completes profile after registration
+# Uses: @adminToken (JWT from registration or OAuth callback)
+#
+# Response: { "id": "...", "firstName": "...", "isProfileCompleted": true, ... }
+PUT {{baseUrl}}/admin/profile
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "image": "https://example.com/admin-profile.jpg",
+  "type": "SUPER_ADMIN"
+}
+
+###
+# ENDPOINT 5 [OWNER]: ASSIGN PERMISSIONS TO ADMIN
+#
+# OWNER assigns permissions to admin after registration
+# Required role: OWNER only
+#
+# Available permissions: [depends on your system]
+# Example: ["CREATE_USERS", "MANAGE_CONTENT", "VIEW_REPORTS", ...]
+#
+# Response: { "permissionsAssigned": 3 }
+POST {{baseUrl}}/admin/{{adminId}}/permissions
+Content-Type: application/json
+Authorization: Bearer {{ownerToken}}
+
+{
+  "permissions": ["CREATE_USERS", "MANAGE_ADMINS", "VIEW_ANALYTICS"]
+}
+
+###
+# FLOW DOCUMENTATION
+# ==================
+#
+# COMPLETE ADMIN SIGNUP FLOW WITH GOOGLE OAUTH:
+# 1. [OWNER] POST /admin/invite with admin email
+# 2. Backend generates invitation token (valid 7 days)
+# 3. Invitation link sent to admin email (TODO)
+# 4. Admin clicks link: /admin/register?token=abc123xyz
+# 5. Frontend extracts token from URL
+# 6. Frontend redirects to: /google/initiate?role=ADMIN&invitationToken=abc123xyz
+# 7. Backend validates invitation token format
+# 8. Backend redirects to Google OAuth screen
+# 9. Admin authorizes, Google redirects to /google/callback
+# 10. Backend exchanges code for Google token
+# 11. Backend verifies Google email matches invitation email
+# 12. Backend checks invitation is valid and not expired
+# 13. Backend creates admin account with Google data
+# 14. Backend marks invitation as ACCEPTED
+# 15. Backend redirects to: FRONTEND_URL/auth-callback?token=JWT&userId=...&role=ADMIN
+# 16. Frontend stores JWT token
+# 17. Admin updates profile with PUT /admin/profile
+# 18. [OWNER] Assigns permissions with POST /admin/:adminId/permissions
+# 19. Admin setup complete
+#
+# DIRECT SIGNUP FLOW (Email/Password):
+# 1. [OWNER] POST /admin/invite with email
+# 2. Admin receives token in email (or via link)
+# 3. Admin POST /admin/register with email, password, invitationToken
+# 4. Backend validates invitation token (bcrypt compare)
+# 5. Backend checks email matches invitation email
+# 6. Backend creates admin account
+# 7. Backend marks invitation as ACCEPTED
+# 8. Backend returns JWT token for immediate login
+# 9. Admin updates profile with PUT /admin/profile
+# 10. [OWNER] Assigns permissions with POST /admin/:adminId/permissions
+#
+# COMMON ENDPOINTS:
+# - POST /login (email/password login)
+# - GET /auth-data (get current admin data)
+# - POST /request-email-verification (optional)
+# - POST /verify-email (optional)
+# - POST /reset-password-request (if forgotten)
+# - POST /reset-password (with code)
+#
+# SECURITY NOTES:
+# - Invitation tokens expire in 7 days
+# - Invitation can only be used once
+# - OWNER must assign permissions before full access
+# - Email must match invitation email
+# - Google email is verified by Google

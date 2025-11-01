@@ -1,0 +1,184 @@
+﻿###
+# COMMON AUTHENTICATION ENDPOINTS
+# ================================
+# 
+# These endpoints work for both STUDENT and ADMIN roles
+# - Login: Email/password authentication
+# - Email Verification: Request code and verify email
+# - Password Reset: Request code and reset password
+# - Auth Data: Get current authenticated user data
+
+@baseUrl = http://localhost:5000/api/auth
+@studentToken = 
+@adminToken = 
+@userId = cuid123
+
+###
+# ENDPOINT 1: LOGIN (Email/Password)
+# Works for both STUDENT and ADMIN
+# 
+# Response: { "token": "JWT...", "id": "cuid...", "role": "STUDENT|ADMIN", ... }
+# Rate Limit: 5 attempts per 15 minutes per IP
+#
+# Copy 'token' to @studentToken or @adminToken
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "student@example.com",
+  "password": "password123"
+}
+
+###
+# ENDPOINT 2: REQUEST EMAIL VERIFICATION
+# Requires authentication
+# 
+# Response: { "userId": "...", "code": "123456" (for testing) }
+# Rate Limit: 5 attempts per 1 hour per user
+POST {{baseUrl}}/request-email-verification
+Content-Type: application/json
+Authorization: Bearer {{studentToken}}
+
+{}
+
+###
+# ENDPOINT 3: VERIFY EMAIL WITH CODE
+# Requires authentication
+# 
+# Code for testing: "123456"
+# In production: Code sent via email
+# Response: { }
+POST {{baseUrl}}/verify-email
+Content-Type: application/json
+Authorization: Bearer {{studentToken}}
+
+{
+  "code": "123456"
+}
+
+###
+# ENDPOINT 4: REQUEST PASSWORD RESET
+# Does NOT require authentication
+# 
+# Response: { "userId": "...", "code": "123456" (for testing) }
+POST {{baseUrl}}/reset-password-request
+Content-Type: application/json
+
+{
+  "email": "student@example.com"
+}
+
+###
+# ENDPOINT 5: RESET PASSWORD
+# Does NOT require authentication
+# 
+# Code for testing: "123456"
+# In production: Code sent via email
+# Response: { }
+POST {{baseUrl}}/reset-password
+Content-Type: application/json
+
+{
+  "userId": "cuid123",
+  "code": "123456",
+  "newPassword": "newSecurePassword456"
+}
+
+###
+# ENDPOINT 6: GET AUTH DATA
+# Requires authentication
+# 
+# Response: { "id": "...", "email": "...", "role": "...", "isEmailVerified": ..., ... }
+GET {{baseUrl}}/auth-data
+Authorization: Bearer {{studentToken}}
+
+###
+# GOOGLE OAUTH ENDPOINTS (Browser-based)
+# ======================================
+#
+# These endpoints handle the complete OAuth flow
+# Must be opened in browser (they redirect)
+
+###
+# GOOGLE OAUTH: INITIATE FLOW (Browser)
+# GET {{baseUrl}}/google/initiate?role=STUDENT
+# GET {{baseUrl}}/google/initiate?role=ADMIN&invitationToken=xxx
+#
+# Opens Google OAuth consent screen
+# After user approves: Google redirects to /google/callback
+# Backend creates account and redirects frontend with JWT
+
+###
+# GOOGLE OAUTH: CALLBACK (Automatic)
+# GET {{baseUrl}}/google/callback?code=xxx&state=yyy
+#
+# Google redirects here after user consent
+# Backend handles token exchange and account creation
+# Backend redirects to: FRONTEND_URL/auth-callback?token=JWT&userId=...
+# Frontend extracts token from URL
+
+###
+# AUTHENTICATION FLOW EXAMPLES
+# ============================
+#
+# STUDENT DIRECT SIGNUP:
+# 1. POST /signup with email and password
+# 2. POST /login to get JWT
+# 3. PUT /student/profile to complete profile
+# 4. POST /request-email-verification and POST /verify-email (optional)
+#
+# STUDENT GOOGLE OAUTH:
+# 1. Browser: GET /google/initiate?role=STUDENT
+# 2. Automatic: GET /google/callback (backend handles)
+# 3. Frontend receives JWT from callback
+# 4. PUT /student/profile to complete profile
+#
+# ADMIN DIRECT SIGNUP:
+# 1. OWNER: POST /admin/invite
+# 2. Admin: POST /admin/register with password + invitationToken
+# 3. Admin: PUT /admin/profile to complete profile
+# 4. OWNER: POST /admin/:adminId/permissions
+#
+# ADMIN GOOGLE OAUTH:
+# 1. OWNER: POST /admin/invite (generates token)
+# 2. Admin: Browser: GET /google/initiate?role=ADMIN&invitationToken=xxx
+# 3. Automatic: GET /google/callback (backend handles with invitation)
+# 4. Frontend receives JWT from callback
+# 5. Admin: PUT /admin/profile to complete profile
+# 6. OWNER: POST /admin/:adminId/permissions
+#
+# PASSWORD RESET:
+# 1. POST /reset-password-request with email (no auth needed)
+# 2. POST /reset-password with userId, code, newPassword
+#
+# EMAIL VERIFICATION:
+# 1. POST /request-email-verification (needs auth)
+# 2. POST /verify-email with code (needs auth)
+
+###
+# RESPONSE EXAMPLES
+# =================
+#
+# Login Success (200):
+# {
+#   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+#   "id": "cuid123",
+#   "email": "student@example.com",
+#   "role": "STUDENT"
+# }
+#
+# Email Verification Success (200):
+# { "message": "Email verified successfully" }
+#
+# Auth Data (200):
+# {
+#   "id": "cuid123",
+#   "email": "student@example.com",
+#   "role": "STUDENT",
+#   "isEmailVerified": false,
+#   "isAccountVerified": true,
+#   "isActive": true
+# }
+#
+# Error Response (400):
+# { "error": "Invalid email or password" }

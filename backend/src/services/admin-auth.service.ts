@@ -29,6 +29,7 @@ import {
 } from "../utils/errors";
 import logger from "../utils/logger";
 import { API_MESSAGES } from "../constants/enums";
+import { verifyGoogleToken } from "../utils/oauth";
 
 /**
  * Helper function to hash password
@@ -123,7 +124,7 @@ export const AdminAuthService = {
   },
 
   /**
-   * Register admin with invitation token
+   * Register admin with invitation token (password-based)
    */
   async registerAdmin(dto: IRegisterAdminDto): Promise<{
     message: string;
@@ -131,12 +132,7 @@ export const AdminAuthService = {
   }> {
     const prisma = getPrisma();
     try {
-      const { email, password, googleToken, invitationToken } = dto;
-
-      // Validate that at least one auth method is provided
-      if (!password && !googleToken) {
-        throw new BadRequestError("Password or Google token required");
-      }
+      const { email, password, invitationToken } = dto;
 
       // Find and validate invitation
       const invitation = await prisma.invitation.findFirst({
@@ -153,10 +149,6 @@ export const AdminAuthService = {
       }
 
       // Verify invitation token
-      if (!invitationToken) {
-        throw new BadRequestError("Invitation token required");
-      }
-
       const isValidToken = await comparePasswords(invitationToken, (invitation as any).tokenHash);
       if (!isValidToken) {
         throw new UnauthorizedError("Invalid invitation token");
@@ -172,44 +164,34 @@ export const AdminAuthService = {
         throw new BadRequestError(API_MESSAGES.EMAIL_ALREADY_EXISTS);
       }
 
-      let authUserData: any = {
-        email,
-        role: invitation.role || "ADMIN",
-        type: "LOCAL",
-        isEmailVerified: true,
-        isMobileVerified: false,
-        isAccountVerified: false,
-        maxLoginDevice: 5,
-        themeMode: "light",
-        tokens: [],
-        verificationTokens: [],
-      };
+      // Hash password
+      const hashedPassword = await hashPassword(password);
 
-      // Normal signup with password
-      if (password) {
-        const hashedPassword = await hashPassword(password);
-        authUserData.passwordHash = hashedPassword;
-        authUserData.provider = "LOCAL";
-      }
-
-      // Google signup
-      if (googleToken) {
-        // TODO: Verify Google token with Google API
-        authUserData.provider = "GOOGLE";
-        authUserData.providerId = "google_sub_placeholder";
-        authUserData.googleId = googleToken;
-      }
-
-      // Create auth user
+      // Create AuthUser
       const authUser = await prisma.authUser.create({
-        data: authUserData,
+        data: {
+          email,
+          role: invitation.role || "ADMIN",
+          type: "LOCAL",
+          provider: "LOCAL",
+          passwordHash: hashedPassword,
+          isEmailVerified: true,
+          isMobileVerified: false,
+          isAccountVerified: false,
+          maxLoginDevice: 5,
+          themeMode: "light",
+          tokens: [],
+          verification_tokens: [],
+        } as any,
       });
 
       // Create AdminProfile
       await prisma.adminProfile.create({
         data: {
           authUserId: authUser.id,
-          type: invitation.role || "ADMIN",
+          signUpVia: "WEB",
+          isProfileCompleted: false,
+          status: "PENDING",
         } as any,
       });
 
@@ -425,6 +407,124 @@ export const AdminAuthService = {
         throw error;
       }
       throw new InternalServerError("Permission assignment failed");
+    }
+  },
+
+  /**
+   * Register admin with Google OAuth and invitation token
+   */
+  async registerAdminWithGoogle(
+    invitationToken: string,
+    email: string,
+    googleData: any
+  ): Promise<{
+    message: string;
+    data: { userId: string; email: string; token: string };
+  }> {
+    const prisma = getPrisma();
+    try {
+      // Find and validate invitation
+      const invitation = await prisma.invitation.findFirst({
+        where: { email },
+      });
+
+      if (!invitation) {
+        throw new BadRequestError("No active invitation for this email");
+      }
+
+      // Check if invitation is still valid
+      if (invitation.status !== "PENDING") {
+        throw new BadRequestError("Invitation has already been used");
+      }
+
+      if ((invitation.expiresAt as Date) < new Date()) {
+        throw new BadRequestError("Invitation has expired");
+      }
+
+      // Verify invitation token matches
+      const isValidToken = await comparePasswords(invitationToken, (invitation as any).tokenHash);
+      if (!isValidToken) {
+        throw new UnauthorizedError("Invalid invitation token");
+      }
+
+      // Verify Google data email matches invitation
+      if (email !== invitation.email) {
+        throw new BadRequestError("Email mismatch with invitation");
+      }
+
+      // Check if email already exists
+      const existingUser = await prisma.authUser.findUnique({
+        where: { email },
+      });
+
+      if (existingUser) {
+        throw new BadRequestError(API_MESSAGES.EMAIL_ALREADY_EXISTS);
+      }
+
+      // Create AuthUser
+      const authUser = await prisma.authUser.create({
+        data: {
+          email,
+          role: "ADMIN",
+          type: "LOCAL",
+          provider: "GOOGLE",
+          providerId: googleData.sub,
+          googleId: googleData.sub,
+          isEmailVerified: true, // Google verified email
+          isMobileVerified: false,
+          isAccountVerified: false,
+          maxLoginDevice: 5,
+          themeMode: "light",
+          tokens: [],
+          verification_tokens: [],
+        } as any,
+      });
+
+      // Create AdminProfile
+      await prisma.adminProfile.create({
+        data: {
+          authUserId: authUser.id,
+          signUpVia: "GOOGLE",
+          isProfileCompleted: false,
+          status: "PENDING",
+          firstName: googleData.given_name,
+          lastName: googleData.family_name,
+          image: googleData.picture,
+        } as any,
+      });
+
+      // Update invitation to ACCEPTED
+      await prisma.invitation.update({
+        where: { id: invitation.id },
+        data: {
+          status: "ACCEPTED",
+          acceptedBy: authUser.id,
+          acceptedAt: new Date(),
+        } as any,
+      });
+
+      // Generate JWT token
+      const token = generateToken({
+        id: authUser.id,
+        role: authUser.role,
+      });
+
+      logger.info(`Admin registered via Google: ${authUser.id}`);
+
+      return {
+        message: "Admin registered successfully",
+        data: {
+          userId: authUser.id,
+          email: authUser.email!,
+          token,
+        },
+      };
+    } catch (error) {
+      logger.error("Error in registerAdminWithGoogle:", error);
+      if (error instanceof BadRequestError || error instanceof UnauthorizedError) {
+        throw error;
+      }
+      throw new InternalServerError("Admin Google registration failed");
     }
   },
 };

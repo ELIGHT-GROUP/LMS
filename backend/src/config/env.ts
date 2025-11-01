@@ -74,6 +74,12 @@ export const validateEnv = (): void => {
 
     // Security Configuration
     // "RATE_LIMIT_MAX",
+
+    // Google OAuth Configuration
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_REDIRECT_URI",
+    "FRONTEND_REDIRECT_URL",
   ];
 
   log.info("🔍 Starting environment variable validation...");

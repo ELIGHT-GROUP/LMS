@@ -1,0 +1,114 @@
+﻿###
+# STUDENT AUTHENTICATION FLOW
+# ============================
+# 
+# Complete flow for student registration and authentication:
+# 1. Google OAuth: /google/initiate (browser redirect)
+# 2. Google OAuth Callback: /google/callback (automatic)
+# 3. Update Profile: /student/profile
+# 4. Get Auth Data: /auth-data
+#
+# OR for email/password signup:
+# 1. Direct Signup: /signup
+# 2. Login: /login (from common-auth.http)
+# 3. Update Profile: /student/profile
+# 4. Verify Email: /verify-email (from common-auth.http)
+
+@baseUrl = http://localhost:5000/api/auth
+@studentToken = 
+@studentUserId = cuid123
+
+###
+# ENDPOINT 1: DIRECT SIGNUP (Email/Password)
+# Response: { "userId": "...", "email": "..." }
+# Next: Login with email/password, then update profile
+POST {{baseUrl}}/signup
+Content-Type: application/json
+
+{
+  "email": "newstudent@example.com",
+  "password": "securePassword123"
+}
+
+###
+# ENDPOINT 2: GOOGLE OAUTH SIGNUP (Browser Flow)
+# 
+# STEP 1: Open in browser to get redirected to Google
+# GET {{baseUrl}}/google/initiate?role=STUDENT
+#
+# STEP 2: User authorizes on Google
+#
+# STEP 3: Google redirects to /google/callback (automatic)
+#         Frontend receives: ?token=JWT&userId=...&role=STUDENT
+#
+# STEP 4: Frontend stores JWT token
+# Copy the 'token' from callback URL to @studentToken
+#
+# Frontend URL: {{baseUrl}}/google/initiate?role=STUDENT
+# Expected redirect: {{baseUrl}}/google/callback?code=...&state=...
+
+###
+# ENDPOINT 3: UPDATE STUDENT PROFILE
+# After signup, update profile before full account verification
+# Uses: @studentToken from login or OAuth callback
+#
+# Response: { "id": "...", "firstName": "...", "isProfileCompleted": true, ... }
+PUT {{baseUrl}}/student/profile
+Content-Type: application/json
+Authorization: Bearer {{studentToken}}
+
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "dob": "2000-01-15T00:00:00Z",
+  "gender": "MALE",
+  "profilePicture": "https://example.com/profile.jpg",
+  "pushId": "firebase_push_notification_id",
+  "year": 2,
+  "nic": "12345-6789012-3",
+  "nicPic": "https://example.com/nic.jpg",
+  "registerCode": "REG123456",
+  "extraDetails": {
+    "university": "FAST NUCES",
+    "program": "CS"
+  },
+  "deliveryDetails": {
+    "address": "123 Main Street",
+    "city": "Lahore",
+    "country": "Pakistan",
+    "zipCode": "54000"
+  }
+}
+
+###
+# FLOW DOCUMENTATION
+# ==================
+#
+# GOOGLE OAUTH FLOW (Recommended):
+# 1. Frontend redirects user to GET /google/initiate?role=STUDENT
+# 2. Backend redirects to Google OAuth consent screen
+# 3. User authorizes
+# 4. Google redirects to GET /google/callback?code=...&state=...
+# 5. Backend exchanges code for Google token
+# 6. Backend verifies token and creates student account
+# 7. Backend redirects to: FRONTEND_URL/auth-callback?token=JWT&userId=...&role=STUDENT
+# 8. Frontend stores JWT token
+# 9. Student updates profile with PUT /student/profile
+# 10. Account setup complete
+#
+# DIRECT SIGNUP FLOW:
+# 1. POST /signup with email and password
+# 2. Account created, email not verified by default
+# 3. POST /login with email and password to get JWT
+# 4. PUT /student/profile to complete profile
+# 5. POST /request-email-verification to get code
+# 6. POST /verify-email with code to verify email
+#
+# EMAIL VERIFICATION (Optional for both flows):
+# - POST /request-email-verification (get 6-digit code)
+# - POST /verify-email with code "123456" (testing)
+#
+# COMMON ENDPOINTS:
+# - GET /auth-data (get current user data)
+# - POST /reset-password-request (if needed)
+# - POST /reset-password (with code and new password)

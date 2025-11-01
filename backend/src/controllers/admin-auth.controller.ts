@@ -29,7 +29,6 @@ export const createInvitation = asyncHandler(async (req: Request, res: Response)
   if (!ownerId) {
     throw new Error("User ID not found in request");
   }
-  // TODO: Add validation with adminInvitationSchema
   const result = await AdminAuthService.createInvitation(req.body, ownerId);
 
   successResponse(res, result.message, result.data, 201);
@@ -38,10 +37,9 @@ export const createInvitation = asyncHandler(async (req: Request, res: Response)
 /**
  * Register admin with invitation token
  * POST /auth/admin/register
- * Body: { email?, password?, googleToken?, invitationToken }
+ * Body: { email, password, invitationToken }
  */
 export const registerAdmin = asyncHandler(async (req: Request, res: Response) => {
-  // TODO: Add validation with adminRegistrationSchema
   const result = await AdminAuthService.registerAdmin(req.body);
 
   successResponse(res, result.message, result.data, 201);
@@ -58,7 +56,6 @@ export const updateAdminProfile = asyncHandler(async (req: Request, res: Respons
   if (!userId) {
     throw new Error("User ID not found in request");
   }
-  // TODO: Add validation with updateAdminProfileSchema
   const result = await AdminAuthService.updateAdminProfile(userId, req.body);
 
   successResponse(res, result.message, result.data);
@@ -77,7 +74,6 @@ export const assignPermissions = asyncHandler(async (req: Request, res: Response
     throw new Error("User ID not found in request");
   }
   const { adminId } = req.params;
-  // TODO: Add validation with assignPermissionsSchema
   const result = await AdminAuthService.assignPermissions(adminId, ownerId, req.body);
 
   successResponse(res, result.message, result.data);

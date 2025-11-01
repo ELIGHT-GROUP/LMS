@@ -79,22 +79,22 @@ export type VerificationTokenRequest = {
 /**
  * User Registration DTO - Student
  * Request body for /auth/signup endpoint
+ * Google signup is handled via OAuth callback
  */
 export interface IRegisterStudentDto {
   email: string;
-  password?: string; // Optional for Google signup
-  googleToken?: string; // Optional for Google signup
+  password: string;
 }
 
 /**
  * Admin Registration DTO
  * Request body for /auth/admin/register endpoint
+ * Google signup is handled via OAuth callback
  */
 export interface IRegisterAdminDto {
-  email?: string; // Not needed for Google signup
-  password?: string; // For normal signup
-  googleToken?: string; // For Google signup
-  invitationToken: string; // Required for both
+  email: string;
+  password: string;
+  invitationToken: string;
 }
 
 /**
@@ -385,4 +385,46 @@ export interface ITokenOptions {
 export interface IOtpResponse {
   code: string;
   expiryMinutes: number;
+}
+
+/**
+ * ============================================
+ * OAUTH DTOs
+ * ============================================
+ */
+
+/**
+ * OAuth Initiate Request
+ * GET /auth/google/initiate?role=STUDENT|ADMIN&invitationToken=optional
+ */
+export interface IOAuthInitiateQuery {
+  role: "STUDENT" | "ADMIN";
+  invitationToken?: string;
+}
+
+/**
+ * OAuth Initiate Response
+ * Redirects to Google OAuth URL
+ */
+export interface IOAuthInitiateResponse {
+  redirectUrl: string;
+}
+
+/**
+ * OAuth Callback Query
+ * GET /auth/google/callback?code=xxx&state=yyy&error=optional
+ */
+export interface IOAuthCallbackQuery {
+  code?: string;
+  state: string;
+  error?: string;
+  error_description?: string;
+}
+
+/**
+ * OAuth Callback Response
+ * Redirects to frontend with JWT
+ */
+export interface IOAuthCallbackResponse {
+  redirectUrl: string;
 }

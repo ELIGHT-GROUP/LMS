@@ -10,9 +10,10 @@ import express from "express";
 import * as AuthController from "../controllers/auth.controller";
 import * as StudentAuthController from "../controllers/student-auth.controller";
 import * as AdminAuthController from "../controllers/admin-auth.controller";
+import * as OAuthController from "../controllers/oauth.controller";
 import { authMiddleware, authorize } from "../middleware/auth.middleware";
 import { loginRateLimiter, emailVerificationRateLimiter } from "../middleware/security.middleware";
-import { validate } from "../middleware/validation.middleware";
+import { validate, validateQuery } from "../middleware/validation.middleware";
 import {
   registerStudentSchema,
   loginSchema,
@@ -25,6 +26,8 @@ import {
   passwordResetRequestSchema,
   passwordResetSchema,
   assignPermissionsSchema,
+  oauthInitiateSchema,
+  oauthCallbackSchema,
 } from "../validators/auth.validators";
 
 const router = express.Router();
@@ -162,6 +165,35 @@ router.post(
   authorize("OWNER"),
   validate(assignPermissionsSchema, "body"),
   AdminAuthController.assignPermissions
+);
+
+/**
+ * ============================================
+ * GOOGLE OAUTH ROUTES
+ * ============================================
+ */
+
+/**
+ * GET /api/auth/google/initiate?role=STUDENT|ADMIN&invitationToken=optional
+ * Initiates Google OAuth flow
+ * Redirects user to Google consent screen
+ */
+router.get(
+  "/google/initiate",
+  validateQuery(oauthInitiateSchema),
+  OAuthController.initiateGoogleOAuth
+);
+
+/**
+ * GET /api/auth/google/callback?code=xxx&state=yyy
+ * Google OAuth callback endpoint
+ * Handles token exchange and user creation
+ * Redirects to frontend with JWT token
+ */
+router.get(
+  "/google/callback",
+  validateQuery(oauthCallbackSchema),
+  OAuthController.googleOAuthCallback
 );
 
 export default router;
