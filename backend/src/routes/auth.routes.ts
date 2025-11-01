@@ -2,81 +2,166 @@
  * Authentication Routes
  * ====================
  * API endpoints for user authentication
+ * Supports separate flows for STUDENT and ADMIN authentication
  */
 
 // @ts-ignore - Express has both default and named exports
 import express from "express";
-import { AuthController } from "../controllers/auth.controller";
-import { authMiddleware } from "../middleware/auth.middleware";
-import { loginRateLimiter, otpRateLimiter } from "../middleware/security.middleware";
-import { validateBody, validateQuery } from "../middleware/validation.middleware";
+import * as AuthController from "../controllers/auth.controller";
+import * as StudentAuthController from "../controllers/student-auth.controller";
+import * as AdminAuthController from "../controllers/admin-auth.controller";
+import { authMiddleware, authorize } from "../middleware/auth.middleware";
+import { loginRateLimiter, emailVerificationRateLimiter } from "../middleware/security.middleware";
+import { validate } from "../middleware/validation.middleware";
 import {
-  registerSchema,
+  registerStudentSchema,
   loginSchema,
-  requestOtpSchema,
-  verifyOtpSchema,
-  requestPasswordResetSchema,
-  resetPasswordSchema,
-  authDataQuerySchema,
+  updateStudentProfileSchema,
+  adminInvitationSchema,
+  adminRegistrationSchema,
+  updateAdminProfileSchema,
+  emailVerificationRequestSchema,
+  emailVerificationSchema,
+  passwordResetRequestSchema,
+  passwordResetSchema,
+  assignPermissionsSchema,
 } from "../validators/auth.validators";
 
 const router = express.Router();
 
 /**
- * POST /api/auth/signup
- * Register a new user
+ * ============================================
+ * STUDENT AUTHENTICATION ROUTES
+ * ============================================
  */
-router.post("/signup", validateBody(registerSchema), AuthController.registerUser);
+
+/**
+ * POST /api/auth/signup
+ * Register a new student (email/password or Google)
+ */
+router.post(
+  "/signup",
+  validate(registerStudentSchema, "body"),
+  StudentAuthController.registerStudent
+);
 
 /**
  * POST /api/auth/login
- * Authenticate user with phone and password
+ * Student/Admin login with email and password
+ * Works for both roles
  */
-router.post("/login", loginRateLimiter, validateBody(loginSchema), AuthController.loginUser);
+router.post("/login", loginRateLimiter, validate(loginSchema, "body"), AuthController.loginUser);
 
 /**
- * GET /api/auth/auth-data
- * Get authenticated user data (requires authentication)
+ * PUT /api/auth/student/profile
+ * Update student profile (requires authentication)
  */
-router.get(
-  "/auth-data",
+router.put(
+  "/student/profile",
   authMiddleware,
-  validateQuery(authDataQuerySchema),
-  AuthController.authData
+  validate(updateStudentProfileSchema, "body"),
+  StudentAuthController.updateStudentProfile
 );
 
 /**
- * POST /api/auth/request-otp
- * Request OTP for mobile verification
+ * POST /api/auth/request-email-verification
+ * Request email verification code (requires authentication)
+ * Works for both STUDENT and ADMIN
  */
 router.post(
-  "/request-otp",
-  otpRateLimiter,
-  validateBody(requestOtpSchema),
-  AuthController.requestSendOtp
+  "/request-email-verification",
+  authMiddleware,
+  emailVerificationRateLimiter,
+  validate(emailVerificationRequestSchema, "body"),
+  AuthController.requestEmailVerification
 );
 
 /**
- * POST /api/auth/verify-mobile
- * Verify mobile number with OTP code
+ * POST /api/auth/verify-email
+ * Verify email with code (requires authentication)
+ * Works for both STUDENT and ADMIN
  */
-router.post("/verify-mobile", validateBody(verifyOtpSchema), AuthController.verifyMobileNumber);
+router.post(
+  "/verify-email",
+  authMiddleware,
+  validate(emailVerificationSchema, "body"),
+  AuthController.verifyEmail
+);
 
 /**
  * POST /api/auth/reset-password-request
  * Request password reset code
+ * Works for both STUDENT and ADMIN
  */
 router.post(
   "/reset-password-request",
-  otpRateLimiter,
-  validateBody(requestPasswordResetSchema),
+  validate(passwordResetRequestSchema, "body"),
   AuthController.requestPasswordReset
 );
 
 /**
  * POST /api/auth/reset-password
- * Reset user password with verification code
+ * Reset password with code
+ * Works for both STUDENT and ADMIN
  */
-router.post("/reset-password", validateBody(resetPasswordSchema), AuthController.resetPassword);
+router.post("/reset-password", validate(passwordResetSchema, "body"), AuthController.resetPassword);
+
+/**
+ * GET /api/auth/auth-data
+ * Get authenticated user data (requires authentication)
+ * Works for both STUDENT and ADMIN
+ */
+router.get("/auth-data", authMiddleware, AuthController.authData);
+
+/**
+ * ============================================
+ * ADMIN AUTHENTICATION ROUTES
+ * ============================================
+ */
+
+/**
+ * POST /api/auth/admin/invite
+ * Create admin invitation (OWNER only)
+ */
+router.post(
+  "/admin/invite",
+  authMiddleware,
+  authorize("OWNER"),
+  validate(adminInvitationSchema, "body"),
+  AdminAuthController.createInvitation
+);
+
+/**
+ * POST /api/auth/admin/register
+ * Register admin with invitation token
+ */
+router.post(
+  "/admin/register",
+  validate(adminRegistrationSchema, "body"),
+  AdminAuthController.registerAdmin
+);
+
+/**
+ * PUT /api/auth/admin/profile
+ * Update admin profile (requires authentication)
+ */
+router.put(
+  "/admin/profile",
+  authMiddleware,
+  validate(updateAdminProfileSchema, "body"),
+  AdminAuthController.updateAdminProfile
+);
+
+/**
+ * POST /api/auth/admin/:adminId/permissions
+ * Assign permissions to admin (OWNER only)
+ */
+router.post(
+  "/admin/:adminId/permissions",
+  authMiddleware,
+  authorize("OWNER"),
+  validate(assignPermissionsSchema, "body"),
+  AdminAuthController.assignPermissions
+);
 
 export default router;

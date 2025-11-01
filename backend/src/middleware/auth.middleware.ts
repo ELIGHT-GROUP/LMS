@@ -103,6 +103,7 @@ export const optionalAuth = async (
 
 /**
  * Role-based authorization middleware factory
+ * Usage: authorize("OWNER") or authorize("ADMIN", "OWNER")
  */
 export const authorize = (...allowedRoles: string[]) => {
   return (req: IAuthenticatedRequest, res: Response, next: NextFunction): void => {

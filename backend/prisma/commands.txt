@@ -1,0 +1,103 @@
+PRISMA COMMANDS - LMS BACKEND
+==============================
+
+1. GENERATE PRISMA CLIENT
+   npx prisma generate
+   - Regenerates Prisma Client based on schema.prisma changes
+   - Run after updating schema or when types are out of sync
+
+2. SYNC SCHEMA TO DATABASE
+   npx prisma db push --skip-generate
+   - Pushes schema changes to database (creates/alters tables)
+   - Does not generate migration files
+   - Skip-generate avoids redundant client generation
+
+3. CREATE AND APPLY MIGRATION
+   npx prisma migrate dev --name <migration_name>
+   - Creates a migration file and applies it to database
+   - Generates Prisma Client automatically
+   - Use for version control and rollback capabilities
+   - Example: npx prisma migrate dev --name add_verification_tokens
+
+4. APPLY EXISTING MIGRATIONS
+   npx prisma migrate deploy
+   - Applies all pending migrations to database
+   - Use in production environments
+   - Does not create new migrations
+
+5. RESET DATABASE
+   npx prisma migrate reset
+   - Drops database, recreates it, applies all migrations
+   - Runs seed script if defined in package.json
+   - WARNING: Deletes all data - use only in development
+
+6. OPEN PRISMA STUDIO (GUI)
+   npx prisma studio
+   - Opens browser-based GUI to view/edit database records
+   - Useful for quick data inspection and testing
+
+7. VALIDATE SCHEMA
+   npx prisma validate
+   - Checks schema.prisma for syntax errors
+   - Validates against Prisma specifications
+
+8. FORMAT SCHEMA
+   npx prisma format
+   - Automatically formats schema.prisma file
+   - Ensures consistent code style
+
+9. VIEW DATABASE STATUS
+   npx prisma db execute --stdin < query.sql
+   - Executes raw SQL against database
+   - Use for direct database queries
+
+10. PULL SCHEMA FROM DATABASE
+    npx prisma db pull
+    - Introspects database and updates schema.prisma
+    - Use when making manual database changes
+
+11. BUILD DATABASE SCHEMA
+    npx prisma db seed
+    - Runs seed script (defined in prisma/seed.ts or package.json)
+    - Populates database with initial data
+
+CONNECTION INFO
+===============
+Neon Database: neondb
+Direct URL: postgresql://neondb_owner:npg_VU6NAElWY1wC@ep-frosty-salad-adnpe08v.c-2.us-east-1.aws.neon.tech/neondb
+Pooled URL: postgresql://neondb_owner:npg_VU6NAElWY1wC@ep-frosty-salad-adnpe08v-pooler.c-2.us-east-1.aws.neon.tech/neondb
+
+ENVIRONMENT VARIABLES
+=====================
+DATABASE_URL=<pooled_connection_string>
+DATABASE_URL_DIRECT=<direct_connection_string>
+
+NOTE: Use pooled URL for application connections
+      Use direct URL for migrations (set in directUrl in schema.prisma)
+
+COMMON WORKFLOWS
+================
+
+1. After schema changes:
+   npx prisma generate
+   npm run build
+   npx tsc --noEmit
+
+2. Create and test migration:
+   npx prisma migrate dev --name <name>
+   npm run build
+   npx tsc --noEmit
+
+3. Production deployment:
+   npx prisma migrate deploy
+   npm run build
+   npm start
+
+4. Full development reset:
+   npx prisma migrate reset
+   npx prisma studio
+
+5. Verify setup:
+   npx prisma validate
+   npx prisma db push --skip-generate
+   npm run build

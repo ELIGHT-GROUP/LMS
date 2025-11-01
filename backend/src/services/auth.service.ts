@@ -8,7 +8,17 @@
 import bcrypt from "bcryptjs";
 import { getPrisma } from "../config/database";
 import { generateToken } from "../utils/jwt";
-import { IRegisterUserDto, ILoginUserDto, IUserProfile } from "../types";
+import {
+  IRegisterStudentDto,
+  ILoginUserDto,
+  IUserProfile,
+  IUpdateStudentProfileDto,
+  IEmailVerificationRequestDto,
+  IEmailVerificationDto,
+  IPasswordResetRequestDto,
+  IPasswordResetDto,
+  IStudentProfileResponse,
+} from "../types";
 import {
   BadRequestError,
   UnauthorizedError,
@@ -19,10 +29,10 @@ import logger from "../utils/logger";
 import { API_MESSAGES } from "../constants/enums";
 
 /**
- * Helper function to generate OTP code
+ * Helper function to generate 6-digit code
  */
-const generateOTPCode = (): string => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+const generateCode = (): string => {
+  return "123456"; // Hardcoded until email integration
 };
 
 /**
@@ -40,91 +50,90 @@ const comparePasswords = async (password: string, hashedPassword: string): Promi
 };
 
 /**
- * Check if verification code has expired
+ * Student Authentication Service - All student auth-related operations
  */
-const isVerificationCodeExpired = (expiresAt: Date | null): boolean => {
-  if (!expiresAt) return true;
-  return new Date() > expiresAt;
-};
-
-/**
- * Authentication Service - All auth-related operations
- */
-export const AuthService = {
+export const StudentAuthService = {
   /**
-   * Register a new user
+   * Register a new student
    */
-  async registerUser(dto: IRegisterUserDto): Promise<{
+  async registerStudent(dto: IRegisterStudentDto): Promise<{
     message: string;
-    data: { userId: string; isEmailVerified: boolean };
+    data: { userId: string; email: string };
   }> {
     const prisma = getPrisma();
     try {
-      const { email, password, phoneNumber, role } = dto;
+      const { email, password, googleToken } = dto;
 
-      // Check if phone number already exists
-      const existingPhoneUser = await prisma.authUser.findUnique({
-        where: { phoneNumber },
-        select: { id: true },
-      });
-
-      if (existingPhoneUser) {
-        throw new BadRequestError(API_MESSAGES.PHONE_ALREADY_EXISTS);
+      // Validate that at least one auth method is provided
+      if (!password && !googleToken) {
+        throw new BadRequestError("Password or Google token required");
       }
 
       // Check if email already exists
-      if (email) {
-        const existingEmailUser = await prisma.authUser.findUnique({
-          where: { email },
-          select: { id: true },
-        });
+      const existingUser = await prisma.authUser.findUnique({
+        where: { email },
+        select: { id: true },
+      });
 
-        if (existingEmailUser) {
-          throw new BadRequestError(API_MESSAGES.EMAIL_ALREADY_EXISTS);
-        }
+      if (existingUser) {
+        throw new BadRequestError(API_MESSAGES.EMAIL_ALREADY_EXISTS);
       }
 
-      // Hash password
-      const hashedPassword = await hashPassword(password);
+      let authUserData: any = {
+        email,
+        role: "STUDENT",
+        type: "LOCAL",
+        isEmailVerified: true,
+        isMobileVerified: false,
+        isAccountVerified: false,
+        maxLoginDevice: 5,
+        themeMode: "light",
+        tokens: [],
+        verification_tokens: [],
+      };
+
+      // Normal signup
+      if (password) {
+        const hashedPassword = await hashPassword(password);
+        authUserData.passwordHash = hashedPassword;
+        authUserData.provider = "LOCAL";
+      }
+
+      // Google signup
+      if (googleToken) {
+        // TODO: Verify Google token with Google API
+        authUserData.provider = "GOOGLE";
+        authUserData.providerId = "google_sub_placeholder";
+        authUserData.googleId = googleToken;
+      }
 
       // Create auth user
       const authUser = await prisma.authUser.create({
-        data: {
-          email: email || undefined,
-          phoneNumber,
-          passwordHash: hashedPassword,
-          role: (role as any) || "STUDENT", // Cast to Role enum
-          isEmailVerified: !!email, // Email counts as verified on registration
-          isMobileVerified: false,
-          type: "LOCAL",
-          maxLoginDevice: 5,
-          themeMode: "light",
-        } as any, // Cast entire data object
+        data: authUserData as any,
       });
 
-      // If role is STUDENT, create StudentProfile with new fields
-      if ((role as any) === "STUDENT" || !role) {
-        await prisma.studentProfile.create({
-          data: {
-            authUserId: authUser.id,
-            isProfileCompleted: false,
-            status: "ACTIVE",
-            // Use type casting for new fields
-          } as any,
-        });
-      }
+      // Create StudentProfile
+      await prisma.studentProfile.create({
+        data: {
+          authUserId: authUser.id,
+          signUpVia: googleToken ? "GOOGLE" : "WEB",
+          isProfileCompleted: false,
+          status: "PENDING",
+          approvalStatus: "PENDING",
+        } as any,
+      });
 
-      logger.info(`User registered successfully: ${authUser.id}`);
+      logger.info(`Student registered successfully: ${authUser.id}`);
 
       return {
         message: API_MESSAGES.USER_CREATED,
         data: {
           userId: authUser.id,
-          isEmailVerified: authUser.isEmailVerified,
+          email: authUser.email!,
         },
       };
     } catch (error) {
-      logger.error("Error in registerUser:", error);
+      logger.error("Error in registerStudent:", error);
       if (error instanceof BadRequestError) {
         throw error;
       }
@@ -133,23 +142,233 @@ export const AuthService = {
   },
 
   /**
-   * Login user with phone and password
+   * Update student profile
    */
-  async loginUser(dto: ILoginUserDto): Promise<{
+  async updateStudentProfile(
+    userId: string,
+    dto: IUpdateStudentProfileDto
+  ): Promise<{
     message: string;
-    data: IUserProfile & { token: string };
+    data: IStudentProfileResponse;
   }> {
     const prisma = getPrisma();
     try {
-      const { phoneNumber, password } = dto;
-
-      // Find user
+      // Find user and profile
       const authUser = await prisma.authUser.findUnique({
-        where: { phoneNumber },
+        where: { id: userId },
       });
 
       if (!authUser) {
         throw new NotFoundError(API_MESSAGES.USER_NOT_FOUND);
+      }
+
+      if (authUser.role !== "STUDENT") {
+        throw new BadRequestError("User is not a student");
+      }
+
+      const studentProfile = await prisma.studentProfile.findUnique({
+        where: { authUserId: userId },
+      });
+
+      if (!studentProfile) {
+        throw new NotFoundError("Student profile not found");
+      }
+
+      // Update StudentProfile
+      const updated = await prisma.studentProfile.update({
+        where: { id: studentProfile.id },
+        data: {
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          dob: dto.dob ? new Date(dto.dob) : undefined,
+          gender: dto.gender,
+          profilePicture: dto.profilePicture,
+          pushId: dto.pushId,
+          year: dto.year,
+          nic: dto.nic,
+          nicPic: dto.nicPic,
+          registerCode: dto.registerCode,
+          extraDetails: dto.extraDetails as any,
+          deliveryDetails: dto.deliveryDetails as any,
+          isProfileCompleted: true,
+        },
+      });
+
+      // Update AuthUser
+      await prisma.authUser.update({
+        where: { id: userId },
+        data: { isAccountVerified: true },
+      });
+
+      logger.info(`Student profile updated: ${userId}`);
+
+      return {
+        message: "Student profile updated successfully",
+        data: {
+          id: updated.id,
+          firstName: updated.firstName || undefined,
+          lastName: updated.lastName || undefined,
+          email: authUser.email!,
+          isProfileCompleted: updated.isProfileCompleted,
+          approvalStatus: updated.approvalStatus,
+        },
+      };
+    } catch (error) {
+      logger.error("Error in updateStudentProfile:", error);
+      if (error instanceof BadRequestError || error instanceof NotFoundError) {
+        throw error;
+      }
+      throw new InternalServerError("Profile update failed");
+    }
+  },
+
+  /**
+   * Request email verification code
+   */
+  async requestEmailVerification(dto: IEmailVerificationRequestDto): Promise<{
+    message: string;
+    data: { userId: string; code: string };
+  }> {
+    const prisma = getPrisma();
+    try {
+      const { userId } = dto;
+
+      const authUser = await prisma.authUser.findUnique({
+        where: { id: userId },
+      });
+
+      if (!authUser) {
+        throw new NotFoundError(API_MESSAGES.USER_NOT_FOUND);
+      }
+
+      if (authUser.isEmailVerified) {
+        throw new BadRequestError("Email already verified");
+      }
+
+      const code = generateCode();
+
+      const existingTokens = Array.isArray((authUser as any).verificationTokens)
+        ? (authUser as any).verificationTokens
+        : [];
+
+      const newVerificationToken = {
+        id: Math.random().toString(36).substring(2, 11),
+        tokenHash: code,
+        type: "VERIFY_EMAIL",
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        isUsed: false,
+        createdAt: new Date(),
+      };
+
+      await prisma.authUser.update({
+        where: { id: userId },
+        data: {
+          verificationTokens: [...existingTokens, newVerificationToken] as any,
+        },
+      });
+
+      logger.info(`Email verification code sent to: ${userId}`);
+
+      return {
+        message: "Verification code sent to email",
+        data: { userId, code },
+      };
+    } catch (error) {
+      logger.error("Error in requestEmailVerification:", error);
+      if (error instanceof BadRequestError || error instanceof NotFoundError) {
+        throw error;
+      }
+      throw new InternalServerError("Email verification request failed");
+    }
+  },
+
+  /**
+   * Verify email with code
+   */
+  async verifyEmail(dto: IEmailVerificationDto): Promise<{
+    message: string;
+  }> {
+    const prisma = getPrisma();
+    try {
+      const { userId, code } = dto;
+
+      const authUser = await prisma.authUser.findUnique({
+        where: { id: userId },
+      });
+
+      if (!authUser) {
+        throw new NotFoundError(API_MESSAGES.USER_NOT_FOUND);
+      }
+
+      const verificationTokens = Array.isArray((authUser as any).verificationTokens)
+        ? (authUser as any).verificationTokens
+        : [];
+
+      const tokenIndex = verificationTokens.findIndex(
+        (t: any) =>
+          t.tokenHash === code &&
+          t.type === "VERIFY_EMAIL" &&
+          !t.isUsed &&
+          new Date(t.expiresAt) > new Date()
+      );
+
+      if (tokenIndex === -1) {
+        throw new BadRequestError("Invalid or expired code");
+      }
+
+      const updatedTokens = [...verificationTokens];
+      updatedTokens[tokenIndex].isUsed = true;
+
+      await prisma.authUser.update({
+        where: { id: userId },
+        data: {
+          isEmailVerified: true,
+          verificationTokens: updatedTokens as any,
+        },
+      });
+
+      logger.info(`Email verified for user: ${userId}`);
+
+      return { message: "Email verified successfully" };
+    } catch (error) {
+      logger.error("Error in verifyEmail:", error);
+      if (error instanceof BadRequestError || error instanceof NotFoundError) {
+        throw error;
+      }
+      throw new InternalServerError("Email verification failed");
+    }
+  },
+
+  /**
+   * Login user with email and password
+   */
+  async loginUser(dto: ILoginUserDto): Promise<{
+    message: string;
+    data: {
+      token: string;
+      id: string;
+      email: string;
+      role: string;
+      isEmailVerified: boolean;
+      isAccountVerified: boolean;
+      isActive: boolean;
+    };
+  }> {
+    const prisma = getPrisma();
+    try {
+      const { email, password } = dto;
+
+      // Find user
+      const authUser = await prisma.authUser.findUnique({
+        where: { email },
+      });
+
+      if (!authUser) {
+        throw new NotFoundError(API_MESSAGES.USER_NOT_FOUND);
+      }
+
+      if (!authUser.passwordHash) {
+        throw new UnauthorizedError("Password not set for this account");
       }
 
       // Verify password
@@ -164,8 +383,7 @@ export const AuthService = {
         role: authUser.role as "OWNER" | "ADMIN" | "STUDENT",
       });
 
-      // Save token to authUser.tokens JSON array (no longer separate table)
-      // Cast tokens to any since Prisma types might not be fully updated
+      // Save token to JSON array
       const existingTokens = Array.isArray((authUser as any).tokens)
         ? (authUser as any).tokens
         : [];
@@ -192,11 +410,9 @@ export const AuthService = {
         data: {
           token,
           id: authUser.id,
-          email: authUser.email || undefined,
-          phoneNumber: authUser.phoneNumber,
+          email: authUser.email!,
           role: authUser.role as "OWNER" | "ADMIN" | "STUDENT",
           isEmailVerified: authUser.isEmailVerified,
-          isMobileVerified: (authUser as any).isMobileVerified || false,
           isAccountVerified: (authUser as any).isAccountVerified || false,
           isActive: authUser.isActive,
         },
@@ -211,153 +427,35 @@ export const AuthService = {
   },
 
   /**
-   * Request OTP for mobile verification
-   */
-  async requestSendOtp(dto: { phoneNumber: string }): Promise<{
-    message: string;
-    data: { userId: string };
-  }> {
-    const prisma = getPrisma();
-    try {
-      const { phoneNumber } = dto;
-
-      const authUser = await prisma.authUser.findUnique({
-        where: { phoneNumber },
-      });
-
-      if (!authUser) {
-        throw new NotFoundError(API_MESSAGES.USER_NOT_FOUND);
-      }
-
-      // Generate OTP code
-      const otpCode = generateOTPCode();
-      // In real implementation, this would be hashed before storing
-      const tokenHash = otpCode;
-
-      // Create verification token in JSON array
-      const existingVerificationTokens = Array.isArray((authUser as any).verificationTokens)
-        ? (authUser as any).verificationTokens
-        : [];
-
-      const newVerificationToken = {
-        id: Math.random().toString(36).substring(2, 11),
-        tokenHash,
-        type: "VERIFY_PHONE",
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
-        isUsed: false,
-        createdAt: new Date(),
-      };
-
-      await prisma.authUser.update({
-        where: { id: authUser.id },
-        data: {
-          verificationTokens: [...existingVerificationTokens, newVerificationToken] as any,
-        },
-      });
-
-      logger.info(`OTP sent to user: ${authUser.id}`);
-
-      return {
-        message: API_MESSAGES.OTP_SENT,
-        data: { userId: authUser.id },
-      };
-    } catch (error) {
-      logger.error("Error in requestSendOtp:", error);
-      if (error instanceof NotFoundError) {
-        throw error;
-      }
-      throw new InternalServerError("OTP request failed");
-    }
-  },
-
-  /**
-   * Verify mobile number with OTP
-   */
-  async verifyMobileNumber(dto: { userId: string; code: string }): Promise<{
-    message: string;
-  }> {
-    const prisma = getPrisma();
-    try {
-      const { userId, code } = dto;
-
-      const authUser = await prisma.authUser.findUnique({
-        where: { id: userId },
-      });
-
-      if (!authUser) {
-        throw new NotFoundError(API_MESSAGES.USER_NOT_FOUND);
-      }
-
-      // Search for verification token in JSON array
-      const verificationTokens = Array.isArray((authUser as any).verificationTokens)
-        ? (authUser as any).verificationTokens
-        : [];
-
-      const tokenIndex = verificationTokens.findIndex(
-        (t: any) => t.tokenHash === code && !t.isUsed && new Date(t.expiresAt) > new Date()
-      );
-
-      if (tokenIndex === -1) {
-        throw new BadRequestError("Invalid or expired OTP");
-      }
-
-      // Mark token as used
-      const updatedTokens = [...verificationTokens];
-      updatedTokens[tokenIndex].isUsed = true;
-
-      await prisma.authUser.update({
-        where: { id: userId },
-        data: {
-          isMobileVerified: true,
-          isActive: true,
-          verificationTokens: updatedTokens as any,
-        },
-      });
-
-      logger.info(`Mobile verified for user: ${userId}`);
-
-      return { message: API_MESSAGES.PHONE_VERIFIED };
-    } catch (error) {
-      logger.error("Error in verifyMobileNumber:", error);
-      if (error instanceof BadRequestError || error instanceof NotFoundError) {
-        throw error;
-      }
-      throw new InternalServerError("Verification failed");
-    }
-  },
-
-  /**
    * Request password reset
    */
-  async requestPasswordReset(dto: { phoneNumber: string }): Promise<{
+  async requestPasswordReset(dto: IPasswordResetRequestDto): Promise<{
     message: string;
-    data: { userId: string };
+    data: { userId: string; code: string };
   }> {
     const prisma = getPrisma();
     try {
-      const { phoneNumber } = dto;
+      const { email } = dto;
 
       const authUser = await prisma.authUser.findUnique({
-        where: { phoneNumber },
+        where: { email },
       });
 
       if (!authUser) {
         throw new NotFoundError(API_MESSAGES.USER_NOT_FOUND);
       }
 
-      // Generate reset code
-      const resetCode = generateOTPCode();
+      const code = generateCode();
 
-      // Create PASSWORD_RESET verification token in JSON array
       const existingVerificationTokens = Array.isArray((authUser as any).verificationTokens)
         ? (authUser as any).verificationTokens
         : [];
 
       const newResetToken = {
         id: Math.random().toString(36).substring(2, 11),
-        tokenHash: resetCode,
+        tokenHash: code,
         type: "PASSWORD_RESET",
-        expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
         isUsed: false,
         createdAt: new Date(),
       };
@@ -369,11 +467,11 @@ export const AuthService = {
         },
       });
 
-      logger.info(`Password reset code sent to user: ${authUser.id}`);
+      logger.info(`Password reset code sent to: ${authUser.id}`);
 
       return {
-        message: "Password reset code sent successfully",
-        data: { userId: authUser.id },
+        message: "Password reset code sent to email",
+        data: { userId: authUser.id, code },
       };
     } catch (error) {
       logger.error("Error in requestPasswordReset:", error);
@@ -385,32 +483,50 @@ export const AuthService = {
   },
 
   /**
-   * Reset user password
+   * Reset password
    */
-  async resetPassword(dto: { userId: string; newPassword: string }): Promise<{
+  async resetPassword(dto: IPasswordResetDto): Promise<{
     message: string;
   }> {
     const prisma = getPrisma();
     try {
-      const { userId, newPassword } = dto;
+      const { userId, code, newPassword } = dto;
 
       const authUser = await prisma.authUser.findUnique({
         where: { id: userId },
-        select: { id: true },
       });
 
       if (!authUser) {
         throw new NotFoundError(API_MESSAGES.USER_NOT_FOUND);
       }
 
-      // Hash new password
+      const verificationTokens = Array.isArray((authUser as any).verificationTokens)
+        ? (authUser as any).verificationTokens
+        : [];
+
+      const tokenIndex = verificationTokens.findIndex(
+        (t: any) =>
+          t.tokenHash === code &&
+          t.type === "PASSWORD_RESET" &&
+          !t.isUsed &&
+          new Date(t.expiresAt) > new Date()
+      );
+
+      if (tokenIndex === -1) {
+        throw new BadRequestError("Invalid or expired code");
+      }
+
+      const updatedTokens = [...verificationTokens];
+      updatedTokens[tokenIndex].isUsed = true;
+
       const hashedPassword = await hashPassword(newPassword);
 
       await prisma.authUser.update({
         where: { id: userId },
         data: {
           passwordHash: hashedPassword,
-          passwordChangedAt: new Date(), // Record when password was changed
+          passwordChangedAt: new Date(),
+          verificationTokens: updatedTokens as any,
         } as any,
       });
 
@@ -419,7 +535,7 @@ export const AuthService = {
       return { message: API_MESSAGES.PASSWORD_RESET_SUCCESS };
     } catch (error) {
       logger.error("Error in resetPassword:", error);
-      if (error instanceof NotFoundError) {
+      if (error instanceof BadRequestError || error instanceof NotFoundError) {
         throw error;
       }
       throw new InternalServerError("Password reset failed");
@@ -429,14 +545,12 @@ export const AuthService = {
   /**
    * Get authenticated user data
    */
-  async authData(dto: { userId: string }): Promise<{
+  async authData(userId: string): Promise<{
     message: string;
     data: IUserProfile;
   }> {
     const prisma = getPrisma();
     try {
-      const { userId } = dto;
-
       const authUser = await prisma.authUser.findUnique({
         where: { id: userId },
       });
@@ -449,11 +563,9 @@ export const AuthService = {
         message: "Auth data fetched successfully",
         data: {
           id: authUser.id,
-          email: authUser.email || undefined,
-          phoneNumber: authUser.phoneNumber,
+          email: authUser.email!,
           role: authUser.role as "OWNER" | "ADMIN" | "STUDENT",
           isEmailVerified: authUser.isEmailVerified,
-          isMobileVerified: (authUser as any).isMobileVerified || false,
           isAccountVerified: (authUser as any).isAccountVerified || false,
           isActive: authUser.isActive,
         },

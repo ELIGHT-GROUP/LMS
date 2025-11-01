@@ -2,79 +2,143 @@
  * Authentication Validators
  * =========================
  * Zod schemas for validating authentication requests
- * Provides type-safe validation for auth endpoints
+ * Email-based authentication with support for Google OAuth
  */
 
 import { z } from "zod";
 import { VALIDATION } from "../constants/enums";
 
 /**
- * Register/Signup validation schema
+ * Student Registration validation schema
+ * POST /auth/signup
+ * Requires either password or googleToken
  */
-export const registerSchema = z.object({
-  phoneNumber: z
-    .string({ message: "Phone number is required" })
-    .min(1, "Phone number cannot be empty")
-    .regex(VALIDATION.PHONE_REGEX, "Invalid phone number format"),
+export const registerStudentSchema = z
+  .object({
+    email: z
+      .string({ message: "Email is required" })
+      .email("Invalid email format")
+      .max(VALIDATION.MAX_EMAIL_LENGTH || 255, "Email is too long"),
 
-  password: z
-    .string({ message: "Password is required" })
-    .min(
-      VALIDATION.MIN_PASSWORD_LENGTH,
-      `Password must be at least ${VALIDATION.MIN_PASSWORD_LENGTH} characters`
-    )
-    .max(
-      VALIDATION.MAX_PASSWORD_LENGTH,
-      `Password must not exceed ${VALIDATION.MAX_PASSWORD_LENGTH} characters`
-    ),
+    password: z
+      .string()
+      .min(
+        VALIDATION.MIN_PASSWORD_LENGTH || 6,
+        `Password must be at least ${VALIDATION.MIN_PASSWORD_LENGTH || 6} characters`
+      )
+      .max(
+        VALIDATION.MAX_PASSWORD_LENGTH || 128,
+        `Password must not exceed ${VALIDATION.MAX_PASSWORD_LENGTH || 128} characters`
+      )
+      .optional(),
 
-  email: z
-    .string()
-    .email("Invalid email format")
-    .max(
-      VALIDATION.MAX_EMAIL_LENGTH,
-      `Email must not exceed ${VALIDATION.MAX_EMAIL_LENGTH} characters`
-    )
-    .optional()
-    .or(z.literal("")),
+    googleToken: z.string().optional(),
+  })
+  .refine(
+    (data) => data.password || data.googleToken,
+    "Either password or googleToken must be provided"
+  );
 
-  role: z
-    .enum(["ADMIN", "TEACHER", "STUDENT", "CLIENT"], {
-      message: "Role must be one of: ADMIN, TEACHER, STUDENT, CLIENT",
-    })
-    .optional(),
-});
+/**
+ * Admin Registration validation schema
+ * POST /auth/admin/register
+ * Requires invitation token and either password or googleToken
+ */
+export const adminRegistrationSchema = z
+  .object({
+    email: z.string().email("Invalid email format").optional(),
+
+    password: z.string().min(6, "Password must be at least 6 characters").optional(),
+
+    googleToken: z.string().optional(),
+
+    invitationToken: z
+      .string({ message: "Invitation token is required" })
+      .min(1, "Invitation token cannot be empty"),
+  })
+  .refine(
+    (data) => data.password || data.googleToken,
+    "Either password or googleToken must be provided"
+  );
 
 /**
  * Login validation schema
+ * POST /auth/login
+ * Email-based login
  */
 export const loginSchema = z.object({
-  phoneNumber: z
-    .string({ message: "Phone number is required" })
-    .min(1, "Phone number cannot be empty"),
+  email: z.string({ message: "Email is required" }).email("Invalid email format"),
 
   password: z.string({ message: "Password is required" }).min(1, "Password cannot be empty"),
 });
 
 /**
- * Request OTP validation schema
+ * Update Student Profile validation schema
+ * PUT /auth/student/profile
+ * All fields are optional
  */
-export const requestOtpSchema = z.object({
-  phoneNumber: z
-    .string({ message: "Phone number is required" })
-    .min(1, "Phone number cannot be empty")
-    .regex(VALIDATION.PHONE_REGEX, "Invalid phone number format"),
+export const updateStudentProfileSchema = z.object({
+  firstName: z.string().optional(),
+
+  lastName: z.string().optional(),
+
+  dob: z.string().datetime().optional(),
+
+  gender: z.enum(["MALE", "FEMALE", "OTHER"]).optional(),
+
+  profilePicture: z.string().url("Invalid profile picture URL").optional(),
+
+  pushId: z.string().optional(),
+
+  year: z.number().int().min(1).optional(),
+
+  nic: z.string().optional(),
+
+  nicPic: z.string().url("Invalid NIC picture URL").optional(),
+
+  registerCode: z.string().optional(),
+
+  extraDetails: z.record(z.string(), z.any()).optional(),
+
+  deliveryDetails: z.record(z.string(), z.any()).optional(),
 });
 
 /**
- * Verify mobile/OTP validation schema
+ * Admin Invitation validation schema
+ * POST /auth/admin/invite
  */
-export const verifyOtpSchema = z.object({
-  userId: z
-    .string({ message: "User ID is required" })
-    .min(1, "User ID cannot be empty")
-    .cuid("Invalid user ID format"),
+export const adminInvitationSchema = z.object({
+  email: z.string({ message: "Email is required" }).email("Invalid email format"),
 
+  role: z.enum(["ADMIN"], { message: "Role must be ADMIN" }),
+});
+
+/**
+ * Update Admin Profile validation schema
+ * PUT /auth/admin/profile
+ * All fields are optional
+ */
+export const updateAdminProfileSchema = z.object({
+  firstName: z.string().optional(),
+
+  lastName: z.string().optional(),
+
+  image: z.string().url("Invalid image URL").optional(),
+
+  type: z.string().optional(),
+});
+
+/**
+ * Email Verification Request validation schema
+ * POST /auth/request-email-verification
+ */
+export const emailVerificationRequestSchema = z.object({});
+
+/**
+ * Email Verification validation schema
+ * POST /auth/verify-email
+ */
+export const emailVerificationSchema = z.object({
   code: z
     .string({ message: "Verification code is required" })
     .length(6, "Verification code must be exactly 6 digits")
@@ -82,51 +146,35 @@ export const verifyOtpSchema = z.object({
 });
 
 /**
- * Password reset request validation schema
+ * Password Reset Request validation schema
+ * POST /auth/reset-password-request
  */
-export const requestPasswordResetSchema = z.object({
-  phoneNumber: z
-    .string({ message: "Phone number is required" })
-    .min(1, "Phone number cannot be empty")
-    .regex(VALIDATION.PHONE_REGEX, "Invalid phone number format"),
+export const passwordResetRequestSchema = z.object({
+  email: z.string({ message: "Email is required" }).email("Invalid email format"),
 });
 
 /**
- * Reset password validation schema
+ * Password Reset validation schema
+ * POST /auth/reset-password
  */
-export const resetPasswordSchema = z.object({
-  userId: z
-    .string({ message: "User ID is required" })
-    .min(1, "User ID cannot be empty")
-    .cuid("Invalid user ID format"),
+export const passwordResetSchema = z.object({
+  userId: z.string({ message: "User ID is required" }).min(1, "User ID cannot be empty"),
+
+  code: z
+    .string({ message: "Verification code is required" })
+    .length(6, "Verification code must be exactly 6 digits")
+    .regex(/^\d+$/, "Verification code must contain only numbers"),
 
   newPassword: z
     .string({ message: "New password is required" })
-    .min(
-      VALIDATION.MIN_PASSWORD_LENGTH,
-      `Password must be at least ${VALIDATION.MIN_PASSWORD_LENGTH} characters`
-    )
-    .max(
-      VALIDATION.MAX_PASSWORD_LENGTH,
-      `Password must not exceed ${VALIDATION.MAX_PASSWORD_LENGTH} characters`
-    ),
+    .min(6, "Password must be at least 6 characters")
+    .max(128, "Password is too long"),
 });
 
 /**
- * Auth data query validation schema
+ * Assign Permissions validation schema
+ * POST /auth/admin/:adminId/permissions
  */
-export const authDataQuerySchema = z.object({
-  userId: z
-    .string({ message: "User ID is required" })
-    .min(1, "User ID cannot be empty")
-    .cuid("Invalid user ID format"),
+export const assignPermissionsSchema = z.object({
+  permissions: z.array(z.string()).min(1, "At least one permission must be specified"),
 });
-
-// Export types inferred from schemas
-export type RegisterInput = z.infer<typeof registerSchema>;
-export type LoginInput = z.infer<typeof loginSchema>;
-export type RequestOtpInput = z.infer<typeof requestOtpSchema>;
-export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
-export type RequestPasswordResetInput = z.infer<typeof requestPasswordResetSchema>;
-export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
-export type AuthDataQueryInput = z.infer<typeof authDataQuerySchema>;

@@ -89,6 +89,25 @@ export const otpRateLimiter = rateLimit({
 });
 
 /**
+ * Email Verification Rate Limiting
+ * Restrict email verification code requests to prevent abuse
+ * Limit: 5 requests per 1 hour
+ */
+export const emailVerificationRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  message: {
+    success: false,
+    message: "Too many email verification requests, please try again after 1 hour",
+  },
+  skipSuccessfulRequests: false,
+  keyGenerator: (req: any) => {
+    // Use userId from JWT token for authenticated requests
+    return req.user?.userId || req.ip;
+  },
+});
+
+/**
  * JSON Body Parser Middleware with size limit
  */
 export const jsonBodyParserMiddleware = express.json({ limit: "100kb" });

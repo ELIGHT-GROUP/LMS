@@ -77,14 +77,24 @@ export type VerificationTokenRequest = {
  */
 
 /**
- * User Registration DTO
+ * User Registration DTO - Student
  * Request body for /auth/signup endpoint
  */
-export interface IRegisterUserDto {
-  email?: string;
-  password: string;
-  phoneNumber: string;
-  role?: "STUDENT" | "ADMIN" | "OWNER";
+export interface IRegisterStudentDto {
+  email: string;
+  password?: string; // Optional for Google signup
+  googleToken?: string; // Optional for Google signup
+}
+
+/**
+ * Admin Registration DTO
+ * Request body for /auth/admin/register endpoint
+ */
+export interface IRegisterAdminDto {
+  email?: string; // Not needed for Google signup
+  password?: string; // For normal signup
+  googleToken?: string; // For Google signup
+  invitationToken: string; // Required for both
 }
 
 /**
@@ -92,23 +102,62 @@ export interface IRegisterUserDto {
  * Request body for /auth/login endpoint
  */
 export interface ILoginUserDto {
-  phoneNumber: string;
+  email: string;
   password: string;
 }
 
 /**
- * OTP Request DTO
- * Request body for /auth/request-otp endpoint
+ * Admin Invitation DTO
+ * Request body for /auth/admin/invite endpoint (OWNER only)
  */
-export interface IOtpRequestDto {
-  phoneNumber: string;
+export interface IAdminInvitationDto {
+  email: string;
+  role: "ADMIN";
 }
 
 /**
- * Verify Mobile DTO
- * Request body for /auth/verify-mobile endpoint
+ * Student Profile Update DTO
+ * Request body for PUT /auth/student/profile endpoint
  */
-export interface IVerifyMobileDto {
+export interface IUpdateStudentProfileDto {
+  firstName?: string;
+  lastName?: string;
+  dob?: string; // ISO date format
+  gender?: string;
+  profilePicture?: string;
+  pushId?: string;
+  year?: number;
+  nic?: string;
+  nicPic?: string;
+  registerCode?: string;
+  extraDetails?: Record<string, any>;
+  deliveryDetails?: Record<string, any>;
+}
+
+/**
+ * Admin Profile Update DTO
+ * Request body for PUT /auth/admin/profile endpoint
+ */
+export interface IUpdateAdminProfileDto {
+  firstName?: string;
+  lastName?: string;
+  image?: string;
+  type?: string;
+}
+
+/**
+ * Email Verification Request DTO
+ * Request body for /auth/request-email-verification endpoint
+ */
+export interface IEmailVerificationRequestDto {
+  userId: string;
+}
+
+/**
+ * Email Verification DTO
+ * Request body for /auth/verify-email endpoint
+ */
+export interface IEmailVerificationDto {
   userId: string;
   code: string;
 }
@@ -118,7 +167,7 @@ export interface IVerifyMobileDto {
  * Request body for /auth/reset-password-request endpoint
  */
 export interface IPasswordResetRequestDto {
-  phoneNumber: string;
+  email: string;
 }
 
 /**
@@ -127,7 +176,16 @@ export interface IPasswordResetRequestDto {
  */
 export interface IPasswordResetDto {
   userId: string;
+  code: string;
   newPassword: string;
+}
+
+/**
+ * Admin Permission Assignment DTO
+ * Request body for POST /auth/admin/:adminId/permissions endpoint
+ */
+export interface IAssignPermissionsDto {
+  permissions: string[]; // Array of permission names/keys
 }
 
 /**
@@ -142,11 +200,9 @@ export interface IPasswordResetDto {
  */
 export interface IUserProfile {
   id: string;
-  email?: string;
-  phoneNumber: string;
+  email: string;
   role: "OWNER" | "ADMIN" | "STUDENT";
   isEmailVerified: boolean;
-  isMobileVerified: boolean;
   isAccountVerified: boolean;
   isActive: boolean;
 }
@@ -165,7 +221,40 @@ export interface ILoginResponse extends IUserProfile {
  */
 export interface IRegisterResponse {
   userId: string;
-  isEmailVerified: boolean;
+  email: string;
+}
+
+/**
+ * Invitation Response DTO
+ * Response body for /auth/admin/invite endpoint
+ */
+export interface IInvitationResponse {
+  invitationLink: string;
+  expiresAt: string;
+}
+
+/**
+ * Student Profile Response DTO
+ */
+export interface IStudentProfileResponse {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  isProfileCompleted: boolean;
+  approvalStatus: string;
+}
+
+/**
+ * Admin Profile Response DTO
+ */
+export interface IAdminProfileResponse {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  type?: string;
+  status: string;
 }
 
 /**
@@ -175,41 +264,84 @@ export interface IRegisterResponse {
  */
 
 /**
- * Authentication Service Interface
- * Defines all auth-related business logic methods
+ * Student Authentication Service Interface
+ * Defines student auth-related business logic methods
  */
-export interface IAuthService {
-  registerUser(dto: IRegisterUserDto): Promise<{
+export interface IStudentAuthService {
+  registerStudent(dto: IRegisterStudentDto): Promise<{
     message: string;
     data: IRegisterResponse;
   }>;
 
+  updateStudentProfile(
+    userId: string,
+    dto: IUpdateStudentProfileDto
+  ): Promise<{
+    message: string;
+    data: IStudentProfileResponse;
+  }>;
+
+  requestEmailVerification(dto: IEmailVerificationRequestDto): Promise<{
+    message: string;
+    data: { userId: string; code: string };
+  }>;
+
+  verifyEmail(dto: IEmailVerificationDto): Promise<{
+    message: string;
+  }>;
+
   loginUser(dto: ILoginUserDto): Promise<{
     message: string;
-    data: ILoginResponse & { token: string };
-  }>;
-
-  requestSendOtp(dto: IOtpRequestDto): Promise<{
-    message: string;
-    data: { userId: string };
-  }>;
-
-  verifyMobileNumber(dto: IVerifyMobileDto): Promise<{
-    message: string;
+    data: ILoginResponse;
   }>;
 
   requestPasswordReset(dto: IPasswordResetRequestDto): Promise<{
     message: string;
-    data: { userId: string };
+    data: { userId: string; code: string };
   }>;
 
   resetPassword(dto: IPasswordResetDto): Promise<{
     message: string;
   }>;
 
-  authData(dto: { userId: string }): Promise<{
+  authData(userId: string): Promise<{
     message: string;
     data: IUserProfile;
+  }>;
+}
+
+/**
+ * Admin Authentication Service Interface
+ * Defines admin auth-related business logic methods
+ */
+export interface IAdminAuthService {
+  createInvitation(
+    dto: IAdminInvitationDto,
+    ownerId: string
+  ): Promise<{
+    message: string;
+    data: IInvitationResponse;
+  }>;
+
+  registerAdmin(dto: IRegisterAdminDto): Promise<{
+    message: string;
+    data: IRegisterResponse;
+  }>;
+
+  updateAdminProfile(
+    userId: string,
+    dto: IUpdateAdminProfileDto
+  ): Promise<{
+    message: string;
+    data: IAdminProfileResponse;
+  }>;
+
+  assignPermissions(
+    adminId: string,
+    dto: IAssignPermissionsDto
+  ): Promise<{
+    message: string;
+    data: { adminId: string; permissions: string[] };
   }>;
 }
 
